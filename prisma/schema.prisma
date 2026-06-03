@@ -1,0 +1,117 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ── Auth (NextAuth v5 / @auth/prisma-adapter) ──────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+
+  username     String   @unique
+  passwordHash String
+  role         Role     @default(PLAYER)
+  createdAt    DateTime @default(now())
+
+  submissions Submission[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ── Bingo ──────────────────────────────────────────────────────────────────
+
+model BingoBoard {
+  id          String      @id @default(cuid())
+  name        String
+  description String?
+  active      Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  tiles       BingoTile[]
+}
+
+model BingoTile {
+  id          String   @id @default(cuid())
+  boardId     String
+  position    Int      // 0–24 for a 5×5 grid
+  title       String
+  description String?
+  points      Int      @default(1)
+  imageUrl    String?  // reference/example image
+
+  board       BingoBoard   @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  submissions Submission[]
+
+  @@unique([boardId, position])
+}
+
+model Submission {
+  id         String           @id @default(cuid())
+  userId     String
+  tileId     String
+  imageUrl   String           // Vercel Blob URL
+  status     SubmissionStatus @default(PENDING)
+  note       String?          // player note
+  reviewNote String?          // admin feedback
+  createdAt  DateTime         @default(now())
+  reviewedAt DateTime?
+
+  user User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tile BingoTile @relation(fields: [tileId], references: [id], onDelete: Cascade)
+}
+
+// ── Enums ──────────────────────────────────────────────────────────────────
+
+enum Role {
+  PLAYER
+  ADMIN
+}
+
+enum SubmissionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
