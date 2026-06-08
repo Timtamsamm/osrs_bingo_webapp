@@ -9,10 +9,8 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  experimental: {
-    outputFileTracingIncludes: {
-      "**": ["./app/generated/prisma/**"],
-    },
+  outputFileTracingIncludes: {
+    "**": ["./app/generated/prisma/**"],
   },
 };
 
