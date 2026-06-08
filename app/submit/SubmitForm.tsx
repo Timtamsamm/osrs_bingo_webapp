@@ -1,73 +1,46 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import Cropper, { Area } from "react-easy-crop";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 
 interface Props {
   tileId: string;
-  userId: string;
+  teamMembers: string[];
 }
 
-async function getCroppedBlob(
-  imageSrc: string,
-  croppedArea: Area
-): Promise<Blob> {
-  const img = await createImageBitmap(
-    await fetch(imageSrc).then((r) => r.blob())
-  );
-  const canvas = document.createElement("canvas");
-  canvas.width = croppedArea.width;
-  canvas.height = croppedArea.height;
-  const ctx = canvas.getContext("2d")!;
-  ctx.drawImage(
-    img,
-    croppedArea.x,
-    croppedArea.y,
-    croppedArea.width,
-    croppedArea.height,
-    0,
-    0,
-    croppedArea.width,
-    croppedArea.height
-  );
-  return new Promise((res) => canvas.toBlob((b) => res(b!), "image/jpeg", 0.9));
-}
-
-export default function SubmitForm({ tileId, userId }: Props) {
+export default function SubmitForm({ tileId, teamMembers }: Props) {
   const router = useRouter();
-  const [imageSrc, setImageSrc] = useState<string | null>(null);
-  const [crop, setCrop] = useState({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState(1);
-  const [croppedArea, setCroppedArea] = useState<Area | null>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
   const [note, setNote] = useState("");
+  const [teamMember, setTeamMember] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const url = URL.createObjectURL(file);
-    setImageSrc(url);
+    const selected = e.target.files?.[0] ?? null;
+    setFile(selected);
+    setPreview(selected ? URL.createObjectURL(selected) : null);
+    setError("");
   }
-
-  const onCropComplete = useCallback((_: Area, areaPixels: Area) => {
-    setCroppedArea(areaPixels);
-  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!imageSrc || !croppedArea) return;
+    if (!file) return;
+    if (teamMembers.length > 0 && !teamMember) {
+      setError("Please select which team member is submitting.");
+      return;
+    }
     setSubmitting(true);
     setError("");
 
     try {
-      const blob = await getCroppedBlob(imageSrc, croppedArea);
       const formData = new FormData();
-      formData.append("file", blob, "submission.jpg");
+      formData.append("file", file);
       formData.append("tileId", tileId);
-      formData.append("userId", userId);
       formData.append("note", note);
+      if (teamMember) formData.append("teamMember", teamMember);
 
       const res = await fetch("/api/submit", { method: "POST", body: formData });
       if (!res.ok) throw new Error(await res.text());
@@ -82,10 +55,26 @@ export default function SubmitForm({ tileId, userId }: Props) {
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+      {teamMembers.length > 0 && (
+        <div>
+          <label className="block text-sm text-gray-400 mb-2">
+            Who is submitting? <span className="text-red-400">*</span>
+          </label>
+          <select
+            value={teamMember}
+            onChange={(e) => { setTeamMember(e.target.value); setError(""); }}
+            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+          >
+            <option value="">Select a team member…</option>
+            {teamMembers.map((m) => (
+              <option key={m} value={m}>{m}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
       <div>
-        <label className="block text-sm text-gray-400 mb-2">
-          Screenshot
-        </label>
+        <label className="block text-sm text-gray-400 mb-2">Screenshot</label>
         <input
           type="file"
           accept="image/*"
@@ -95,32 +84,9 @@ export default function SubmitForm({ tileId, userId }: Props) {
         />
       </div>
 
-      {imageSrc && (
-        <div className="relative w-full h-72 bg-gray-900 rounded-xl overflow-hidden border border-gray-700">
-          <Cropper
-            image={imageSrc}
-            crop={crop}
-            zoom={zoom}
-            aspect={16 / 9}
-            onCropChange={setCrop}
-            onZoomChange={setZoom}
-            onCropComplete={onCropComplete}
-          />
-        </div>
-      )}
-
-      {imageSrc && (
-        <div className="flex flex-col gap-1">
-          <label className="text-sm text-gray-400">Zoom</label>
-          <input
-            type="range"
-            min={1}
-            max={3}
-            step={0.05}
-            value={zoom}
-            onChange={(e) => setZoom(Number(e.target.value))}
-            className="accent-amber-500"
-          />
+      {preview && (
+        <div className="relative w-full aspect-video rounded-xl overflow-hidden border border-gray-700 bg-gray-900">
+          <Image src={preview} alt="Preview" fill className="object-contain" />
         </div>
       )}
 
@@ -142,7 +108,7 @@ export default function SubmitForm({ tileId, userId }: Props) {
 
       <button
         type="submit"
-        disabled={!imageSrc || submitting}
+        disabled={!file || submitting}
         className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-gray-950 font-semibold rounded-lg py-2 transition-colors"
       >
         {submitting ? "Uploading…" : "Submit"}

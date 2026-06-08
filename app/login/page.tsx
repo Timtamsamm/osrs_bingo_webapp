@@ -7,28 +7,53 @@ import { useRouter } from "next/navigation";
 export default function LoginPage() {
   const router = useRouter();
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({ username: "", password: "" });
+  const [failed, setFailed] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  function clearFieldError(field: "username" | "password") {
+    setFieldErrors((prev) => ({ ...prev, [field]: "" }));
+    setError("");
+    setFailed(false);
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    const username = (form.get("username") as string).trim();
+    const password = form.get("password") as string;
+
+    const errors = { username: "", password: "" };
+    if (!username) errors.username = "Username is required.";
+    if (!password) errors.password = "Password is required.";
+    if (errors.username || errors.password) {
+      setFieldErrors(errors);
+      return;
+    }
+
     setError("");
+    setFailed(false);
     setLoading(true);
 
-    const form = new FormData(e.currentTarget);
-    const result = await signIn("credentials", {
-      username: form.get("username"),
-      password: form.get("password"),
-      redirect: false,
-    });
+    const result = await signIn("credentials", { username, password, redirect: false });
 
     setLoading(false);
 
     if (result?.error) {
-      setError("Invalid username or password.");
+      setError("Incorrect username or password. Please try again.");
+      setFailed(true);
     } else {
       router.push("/");
     }
   }
+
+  const inputClass = (field: "username" | "password") =>
+    [
+      "bg-gray-800 border rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 transition-colors",
+      fieldErrors[field] || (failed && field === "password")
+        ? "border-red-500 focus:ring-red-500"
+        : "border-gray-700 focus:ring-amber-500",
+    ].join(" ");
 
   return (
     <main className="min-h-screen flex items-center justify-center bg-gray-950 px-4">
@@ -39,6 +64,7 @@ export default function LoginPage() {
 
         <form
           onSubmit={handleSubmit}
+          noValidate
           className="bg-gray-900 rounded-xl p-8 flex flex-col gap-4 border border-gray-800"
         >
           <h2 className="text-lg font-semibold text-white">Sign in</h2>
@@ -51,10 +77,13 @@ export default function LoginPage() {
               id="username"
               name="username"
               type="text"
-              required
               autoComplete="username"
-              className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-500"
+              onChange={() => clearFieldError("username")}
+              className={inputClass("username")}
             />
+            {fieldErrors.username && (
+              <p className="text-xs text-red-400">{fieldErrors.username}</p>
+            )}
           </div>
 
           <div className="flex flex-col gap-1">
@@ -65,14 +94,19 @@ export default function LoginPage() {
               id="password"
               name="password"
               type="password"
-              required
               autoComplete="current-password"
-              className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-500"
+              onChange={() => clearFieldError("password")}
+              className={inputClass("password")}
             />
+            {fieldErrors.password && (
+              <p className="text-xs text-red-400">{fieldErrors.password}</p>
+            )}
           </div>
 
           {error && (
-            <p className="text-sm text-red-400">{error}</p>
+            <div className="bg-red-950/50 border border-red-800 rounded-lg px-3 py-2">
+              <p className="text-sm text-red-400">{error}</p>
+            </div>
           )}
 
           <button

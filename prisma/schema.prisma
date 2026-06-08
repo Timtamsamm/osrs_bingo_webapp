@@ -4,7 +4,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL_UNPOOLED")
 }
 
 // ── Auth (NextAuth v5 / @auth/prisma-adapter) ──────────────────────────────
@@ -21,6 +23,7 @@ model User {
   username     String   @unique
   passwordHash String
   role         Role     @default(PLAYER)
+  teamMembers  String[] @default([])
   createdAt    DateTime @default(now())
 
   submissions Submission[]
@@ -69,6 +72,9 @@ model BingoBoard {
   name        String
   description String?
   active      Boolean     @default(true)
+  startsAt    DateTime?
+  endsAt      DateTime?
+  maxTeamSize Int         @default(10)
   createdAt   DateTime    @default(now())
   tiles       BingoTile[]
 }
@@ -79,8 +85,12 @@ model BingoTile {
   position    Int      // 0–24 for a 5×5 grid
   title       String
   description String?
-  points      Int      @default(1)
-  imageUrl    String?  // reference/example image
+  points              Float    @default(1)
+  pointsPerSubmission Float    @default(1)
+  imageUrl            String?  // reference/example image
+
+  requiredCount Int          @default(1)
+  autoApprove   Boolean      @default(false)
 
   board       BingoBoard   @relation(fields: [boardId], references: [id], onDelete: Cascade)
   submissions Submission[]
@@ -96,6 +106,7 @@ model Submission {
   status     SubmissionStatus @default(PENDING)
   note       String?          // player note
   reviewNote String?          // admin feedback
+  teamMember String?          // which team member submitted
   createdAt  DateTime         @default(now())
   reviewedAt DateTime?
 
