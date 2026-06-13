@@ -7,6 +7,7 @@ import Link from "next/link";
 import Image from "next/image";
 import BoardTabNav from "@/app/components/BoardTabNav";
 import Countdown from "@/app/components/Countdown";
+import GameFrame from "@/app/components/GameFrame";
 
 export default async function BoardPage() {
   const session = await auth();
@@ -36,7 +37,8 @@ export default async function BoardPage() {
   // Pre-event gate — show countdown screen if event hasn't started yet
   if (board?.startsAt && board.startsAt > new Date()) {
     return (
-      <main className="min-h-screen bg-gray-950 text-white flex flex-col items-center justify-center p-6">
+      <GameFrame>
+        <div className="h-full flex flex-col items-center justify-center p-4">
         <div className="flex flex-col items-center gap-6 text-center">
           <div>
             <h1 className="text-3xl font-bold">{board.name}</h1>
@@ -52,7 +54,8 @@ export default async function BoardPage() {
             </button>
           </form>
         </div>
-      </main>
+        </div>
+      </GameFrame>
     );
   }
 
@@ -65,16 +68,14 @@ export default async function BoardPage() {
   const totalPoints = board?.tiles.reduce((sum, tile) => sum + tile.points, 0) ?? 0;
 
   return (
-    <main className="min-h-screen bg-gray-950 text-white p-6">
-      <div className="max-w-3xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-bold">{board?.name ?? "Bingo Board"}</h1>
-            {board?.description && (
-              <p className="text-gray-400 text-sm mt-1">{board.description}</p>
-            )}
-          </div>
-          <div className="flex flex-col items-end gap-2">
+    <GameFrame>
+      <div className="max-w-3xl mx-auto p-4">
+        <div className="relative mb-6 text-center pt-3">
+          <h1 className="text-2xl font-bold">{board?.name ?? "Bingo Board"}</h1>
+          {board?.description && (
+            <p className="text-gray-400 text-sm mt-1">{board.description}</p>
+          )}
+          <div className="absolute right-0 top-0 flex flex-col items-end gap-2">
             {board && (
               <p className="text-sm font-semibold">
                 <span className="text-amber-400">{+earnedPoints.toFixed(1)}</span>
@@ -113,8 +114,12 @@ export default async function BoardPage() {
 
         <BoardTabNav />
 
-        {!board ? (
-          <p className="text-gray-400">No active bingo board found.</p>
+        {!board || board.tiles.every((t) => !t.title.trim()) ? (
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <p className="text-4xl mb-4">🔨</p>
+            <p className="text-lg font-semibold text-gray-300">The board is still being designed</p>
+            <p className="text-sm text-gray-500 mt-1">Check back soon — the next event is being set up.</p>
+          </div>
         ) : (
           <div className="grid grid-cols-5 gap-2">
             {board.tiles.map((tile) => {
@@ -148,8 +153,8 @@ export default async function BoardPage() {
                 bgStyle = "bg-red-900/10";
                 textStyle = "text-gray-300";
               } else {
-                borderStyle = "border-gray-700 hover:border-gray-500";
-                bgStyle = "bg-gray-900";
+                borderStyle = "border-stone-600/80 hover:border-amber-700/60";
+                bgStyle = "bg-stone-900/80";
                 textStyle = "text-gray-300";
               }
 
@@ -197,9 +202,9 @@ export default async function BoardPage() {
           <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded border-2 border-orange-500 bg-orange-500/10" />In progress</span>
           <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded border-2 border-green-700 bg-green-900/15" />Awaiting review</span>
           <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded border-2 border-red-700 bg-red-900/10" />Rejected</span>
-          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded border-2 border-gray-700 bg-gray-900" />Not started</span>
+          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded border-2 border-stone-600/80 bg-stone-900/80" />Not started</span>
         </div>
       </div>
-    </main>
+    </GameFrame>
   );
 }

@@ -96,7 +96,7 @@ export default function CreateUserForm({ maxTeamSize }: { maxTeamSize: number })
       {role === "PLAYER" && (
         <div className="flex flex-col gap-2">
           <label className="text-xs text-gray-400">
-            Team members <span className="text-gray-600">(optional — up to {maxTeamSize})</span>
+            Team members
           </label>
           <div className="flex flex-col gap-2">
             {members.map((m, i) => (

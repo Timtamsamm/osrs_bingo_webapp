@@ -8,9 +8,10 @@ export default function BoardTabNav() {
 
   return (
     <div className="flex justify-center mb-8">
-      <div className="flex bg-gray-900 border border-gray-800 rounded-xl p-1 gap-1">
+      <div className="flex bg-stone-900/90 border border-stone-700/60 rounded-xl p-1 gap-1">
         <TabLink href="/board" active={pathname === "/board"}>Board</TabLink>
         <TabLink href="/leaderboard" active={pathname === "/leaderboard"}>Leaderboard</TabLink>
+        <TabLink href="/players" active={pathname === "/players"}>Players</TabLink>
       </div>
     </div>
   );
@@ -21,7 +22,7 @@ function TabLink({ href, active, children }: { href: string; active: boolean; ch
     <Link
       href={href}
       className={`px-6 py-2 rounded-lg text-sm font-semibold transition-colors ${
-        active ? "bg-amber-500 text-gray-950" : "text-gray-400 hover:text-white"
+        active ? "bg-amber-500 text-stone-950" : "text-stone-400 hover:text-white"
       }`}
     >
       {children}

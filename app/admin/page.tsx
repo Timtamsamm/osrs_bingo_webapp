@@ -4,13 +4,16 @@ import Link from "next/link";
 export default async function AdminDashboard() {
   const [pendingCount, userCount, board] = await Promise.all([
     prisma.submission.count({ where: { status: "PENDING" } }),
-    prisma.user.count(),
-    prisma.bingoBoard.findFirst({ where: { active: true }, include: { _count: { select: { tiles: true } } } }),
+    prisma.user.count({ where: { role: "PLAYER" } }),
+    prisma.bingoBoard.findFirst({
+      where: { active: true },
+      include: { _count: { select: { tiles: { where: { title: { not: "" } } } } } },
+    }),
   ]);
 
   const stats = [
     { label: "Pending Submissions", value: pendingCount, href: "/admin/submissions", urgent: pendingCount > 0 },
-    { label: "Registered Users", value: userCount, href: "/admin/users", urgent: false },
+    { label: "Registered Teams", value: userCount, href: "/admin/users", urgent: false },
     { label: "Active Board Tiles", value: board?._count.tiles ?? 0, href: "/admin/board", urgent: false },
   ];
 

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import GameFrame from "@/app/components/GameFrame";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -56,7 +57,8 @@ export default function LoginPage() {
     ].join(" ");
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-gray-950 px-4">
+    <GameFrame>
+      <div className="h-full flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
         <h1 className="text-3xl font-bold text-center text-white mb-8">
           OSRS Bingo
@@ -118,6 +120,7 @@ export default function LoginPage() {
           </button>
         </form>
       </div>
-    </main>
+      </div>
+    </GameFrame>
   );
 }

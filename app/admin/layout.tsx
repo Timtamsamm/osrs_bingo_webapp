@@ -18,7 +18,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <NavLink href="/admin">Dashboard</NavLink>
           <NavLink href="/admin/board">Board & Tiles</NavLink>
           <NavLink href="/admin/submissions">Submissions</NavLink>
-          <NavLink href="/admin/users">Users</NavLink>
+          <NavLink href="/admin/users">Teams</NavLink>
         </nav>
         <div className="p-3 border-t border-gray-800">
           <Link href="/" className="block text-sm text-gray-500 hover:text-white px-3 py-2 rounded-lg transition-colors">

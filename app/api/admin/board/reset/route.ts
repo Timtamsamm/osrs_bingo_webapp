@@ -30,9 +30,10 @@ export async function DELETE() {
 
   const tileImageUrls = board.tiles.map((t) => t.imageUrl).filter((u): u is string => u !== null);
 
-  // Delete all submissions and reset all tile content in one transaction
+  // Delete all submissions, snapshots, and reset all tile content in one transaction
   await prisma.$transaction([
     prisma.submission.deleteMany({ where: { tileId: { in: tileIds } } }),
+    prisma.playerSnapshot.deleteMany({ where: { boardId: board.id } }),
     prisma.bingoTile.updateMany({
       where: { id: { in: tileIds } },
       data: {

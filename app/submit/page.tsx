@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import SubmitForm from "./SubmitForm";
 import Link from "next/link";
 import Image from "next/image";
+import GameFrame from "@/app/components/GameFrame";
 
 interface Props {
   searchParams: Promise<{ tileId?: string }>;
@@ -44,8 +45,8 @@ export default async function SubmitPage({ searchParams }: Props) {
   const showProgress = tile.requiredCount > 1;
 
   return (
-    <main className="min-h-screen bg-gray-950 text-white p-6">
-      <div className="max-w-lg mx-auto">
+    <GameFrame>
+      <div className="max-w-lg mx-auto p-4">
         <div className="flex items-center gap-3 mb-1">
           <Link href="/board" className="text-gray-500 hover:text-white transition-colors text-sm">← Board</Link>
         </div>
@@ -115,6 +116,6 @@ export default async function SubmitPage({ searchParams }: Props) {
           <SubmitForm tileId={tile.id} teamMembers={currentUser?.teamMembers ?? []} />
         )}
       </div>
-    </main>
+    </GameFrame>
   );
 }

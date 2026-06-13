@@ -15,16 +15,26 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await params;
-  const { password } = await req.json();
+  const body = await req.json();
 
-  if (!password || typeof password !== "string") {
-    return NextResponse.json({ error: "Password required" }, { status: 400 });
+  if (body.password) {
+    if (typeof body.password !== "string") {
+      return NextResponse.json({ error: "Invalid password" }, { status: 400 });
+    }
+    const passwordHash = await bcrypt.hash(body.password, 12);
+    await prisma.user.update({ where: { id }, data: { passwordHash } });
+    return NextResponse.json({ ok: true });
   }
 
-  const passwordHash = await bcrypt.hash(password, 12);
-  await prisma.user.update({ where: { id }, data: { passwordHash } });
+  if (body.teamMembers !== undefined) {
+    if (!Array.isArray(body.teamMembers) || body.teamMembers.some((m: unknown) => typeof m !== "string")) {
+      return NextResponse.json({ error: "teamMembers must be an array of strings" }, { status: 400 });
+    }
+    await prisma.user.update({ where: { id }, data: { teamMembers: body.teamMembers } });
+    return NextResponse.json({ ok: true });
+  }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
 }
 
 export async function PATCH(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

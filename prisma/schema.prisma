@@ -68,15 +68,27 @@ model VerificationToken {
 // ── Bingo ──────────────────────────────────────────────────────────────────
 
 model BingoBoard {
-  id          String      @id @default(cuid())
+  id          String            @id @default(cuid())
   name        String
   description String?
-  active      Boolean     @default(true)
+  active      Boolean           @default(true)
   startsAt    DateTime?
   endsAt      DateTime?
-  maxTeamSize Int         @default(10)
-  createdAt   DateTime    @default(now())
+  maxTeamSize Int               @default(10)
+  createdAt   DateTime          @default(now())
   tiles       BingoTile[]
+  snapshots   PlayerSnapshot[]
+}
+
+model PlayerSnapshot {
+  id         String     @id @default(cuid())
+  boardId    String
+  board      BingoBoard @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  memberName String
+  bosses     Json
+  takenAt    DateTime   @default(now())
+
+  @@unique([boardId, memberName])
 }
 
 model BingoTile {

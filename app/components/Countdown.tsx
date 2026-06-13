@@ -51,11 +51,14 @@ export default function Countdown({ endsAt, label = "Ends in", reloadOnExpire = 
 
   if (remaining <= 0) return null;
 
+  const dateStr = new Date(endsAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+
   return (
     <div className="flex justify-center items-baseline gap-2 mb-2">
       <span className="text-xs text-gray-500 uppercase tracking-wider">{label}</span>
       <span className="font-mono font-bold text-amber-400 text-lg tracking-widest" suppressHydrationWarning>{format(remaining)}</span>
-      <span className="text-xs text-gray-600">dd:hh:mm:ss</span>
+      <span className="text-xs text-gray-500">·</span>
+<span className="text-xs text-gray-400" suppressHydrationWarning>{dateStr}</span>
     </div>
   );
 }

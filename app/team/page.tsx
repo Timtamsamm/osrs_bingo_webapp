@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import TeamEditor from "./TeamEditor";
+import GameFrame from "@/app/components/GameFrame";
 
 export default async function TeamPage() {
   const session = await auth();
@@ -26,8 +27,8 @@ export default async function TeamPage() {
   const maxTeamSize = board?.maxTeamSize ?? 10;
 
   return (
-    <main className="min-h-screen bg-gray-950 text-white p-6">
-      <div className="max-w-lg mx-auto">
+    <GameFrame>
+      <div className="max-w-lg mx-auto p-4">
         <div className="flex items-center gap-3 mb-1">
           <Link href="/board" className="text-gray-500 hover:text-white transition-colors text-sm">
             ← Board
@@ -44,6 +45,6 @@ export default async function TeamPage() {
           maxTeamSize={maxTeamSize}
         />
       </div>
-    </main>
+    </GameFrame>
   );
 }
