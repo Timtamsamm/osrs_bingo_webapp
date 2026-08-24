@@ -77,7 +77,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   await prisma.user.delete({ where: { id } });
 
   if (submissions.length > 0) {
-    await del(submissions.map((s) => s.imageUrl));
+    await del(submissions.map((s) => s.imageUrl).filter((u): u is string => u !== null));
   }
 
   return NextResponse.json({ ok: true });
