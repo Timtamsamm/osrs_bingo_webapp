@@ -1,3 +1,14 @@
+/**
+ * OSRS hiscores integration.
+ *
+ * Fetches boss kill counts directly from the Jagex hiscores CSV API
+ * (secure.runescape.com/m=hiscore_oldschool/index_lite.ws).
+ *
+ * The CSV has 25 skill lines followed by activity lines. Each activity line is
+ * "rank,score" — a score of -1 means the player is unranked for that activity.
+ * The ACTIVITIES array maps each 0-based activity index to a human-readable name;
+ * null entries are non-boss slots (minigames, etc.) that we skip.
+ */
 export type BossKCs = Record<string, number>;
 
 // 89 activity slots from index_lite.ws (lines 26–114 of the CSV).

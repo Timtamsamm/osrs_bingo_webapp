@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 
-type TileInput = { title: string; description: string; pointsPerSubmission: number; requiredCount: number; imageUrl?: string };
+type DinkItem = { id: number; name: string };
+type TileInput = { title: string; description: string; pointsPerSubmission: number; requiredCount: number; imageUrl?: string; dinkItems?: DinkItem[] };
 
 async function requireAdmin() {
   const session = await auth();
@@ -13,7 +14,7 @@ async function requireAdmin() {
 export async function POST(req: NextRequest) {
   if (!await requireAdmin()) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const { name, description, startsAt, endsAt, maxTeamSize, tiles } = await req.json();
+  const { name, description, startsAt, endsAt, maxTeamSize, passcode, dinkToken, tiles } = await req.json();
   if (!name?.trim()) return NextResponse.json({ error: "Name required" }, { status: 400 });
 
   await prisma.bingoBoard.updateMany({ where: { active: true }, data: { active: false } });
@@ -25,6 +26,8 @@ export async function POST(req: NextRequest) {
       startsAt: startsAt ? new Date(startsAt) : null,
       endsAt: endsAt ? new Date(endsAt) : null,
       maxTeamSize: maxTeamSize ? Number(maxTeamSize) : 10,
+      passcode: passcode?.trim() || null,
+      dinkToken: dinkToken?.trim() || null,
       active: true,
       tiles: {
         create: Object.entries(tiles as Record<string, TileInput>)
@@ -38,6 +41,7 @@ export async function POST(req: NextRequest) {
             requiredCount: t.requiredCount,
             autoApprove: false,
             imageUrl: t.imageUrl || null,
+            dinkItems: t.dinkItems ?? [],
           })),
       },
     },
@@ -49,7 +53,7 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   if (!await requireAdmin()) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const { id, name, description, startsAt, endsAt, maxTeamSize, tiles } = await req.json();
+  const { id, name, description, startsAt, endsAt, maxTeamSize, passcode, dinkToken, tiles } = await req.json();
   if (!id || !name?.trim()) return NextResponse.json({ error: "Missing fields" }, { status: 400 });
 
   await prisma.bingoBoard.update({
@@ -60,6 +64,8 @@ export async function PUT(req: NextRequest) {
       startsAt: startsAt ? new Date(startsAt) : null,
       endsAt: endsAt ? new Date(endsAt) : null,
       maxTeamSize: maxTeamSize ? Number(maxTeamSize) : 10,
+      passcode: passcode?.trim() || null,
+      dinkToken: dinkToken?.trim() || null,
     },
   });
 
@@ -77,6 +83,7 @@ export async function PUT(req: NextRequest) {
       requiredCount: t.requiredCount,
       autoApprove: false,
       imageUrl: t.imageUrl || null,
+      dinkItems: t.dinkItems ?? [],
     };
     if (existing) {
       await prisma.bingoTile.update({ where: { id: existing.id }, data });

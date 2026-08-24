@@ -6,9 +6,13 @@ import Image from "next/image";
 
 interface Submission {
   id: string;
-  imageUrl: string;
+  imageUrl: string | null;
   note: string | null;
   createdAt: Date;
+  status: string;
+  source: string;
+  dinkItemName: string | null;
+  teamMember: string | null;
   user: { username: string };
   tile: { title: string; requiredCount: number };
 }
@@ -18,6 +22,9 @@ export default function SubmissionReviewer({ submission: s }: { submission: Subm
   const [reviewNote, setReviewNote] = useState("");
   const [loading, setLoading] = useState(false);
   const [lightbox, setLightbox] = useState(false);
+
+  const isDink = s.source === "dink";
+  const isApproved = s.status === "APPROVED";
 
   useEffect(() => {
     if (!lightbox) return;
@@ -48,12 +55,30 @@ export default function SubmissionReviewer({ submission: s }: { submission: Subm
   }
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+    <div className={`bg-gray-900 border rounded-xl overflow-hidden ${isDink ? "border-purple-700/50" : "border-gray-800"}`}>
       <div className="flex gap-4 p-4 border-b border-gray-800 items-center">
         <div className="flex-1">
-          <p className="font-medium text-white">{s.tile.title}</p>
-          <p className="text-sm text-gray-400">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="font-medium text-white">{s.tile.title}</p>
+            {isDink && (
+              <span className="text-xs font-semibold bg-purple-600/20 text-purple-400 border border-purple-600/30 rounded px-1.5 py-0.5">
+                Dink
+              </span>
+            )}
+            {isApproved && (
+              <span className="text-xs font-semibold bg-green-600/20 text-green-400 border border-green-600/30 rounded px-1.5 py-0.5">
+                Auto-approved
+              </span>
+            )}
+          </div>
+          <p className="text-sm text-gray-400 mt-0.5">
             by <span className="text-gray-200">{s.user.username}</span>
+            {s.teamMember && isDink && (
+              <> · RSN: <span className="text-gray-300">{s.teamMember}</span></>
+            )}
+            {s.dinkItemName && (
+              <> · <span className="text-purple-300">{s.dinkItemName}</span></>
+            )}
             {" · "}
             <span suppressHydrationWarning>{new Date(s.createdAt).toLocaleDateString()}</span>
           </p>
@@ -66,19 +91,25 @@ export default function SubmissionReviewer({ submission: s }: { submission: Subm
       </div>
 
       <div className="flex gap-4 p-4">
-        <button
-          type="button"
-          onClick={() => setLightbox(true)}
-          className="relative w-64 h-36 shrink-0 rounded-lg overflow-hidden bg-gray-800 group cursor-zoom-in"
-          title="Click to enlarge"
-        >
-          <Image src={s.imageUrl} alt="Submission" fill sizes="256px" className="object-cover" />
-          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-            <span className="text-white text-xl opacity-0 group-hover:opacity-100 transition-opacity">⤢</span>
+        {s.imageUrl ? (
+          <button
+            type="button"
+            onClick={() => setLightbox(true)}
+            className="relative w-64 h-36 shrink-0 rounded-lg overflow-hidden bg-gray-800 group cursor-zoom-in"
+            title="Click to enlarge"
+          >
+            <Image src={s.imageUrl} alt="Submission" fill sizes="256px" className="object-cover" />
+            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+              <span className="text-white text-xl opacity-0 group-hover:opacity-100 transition-opacity">⤢</span>
+            </div>
+          </button>
+        ) : (
+          <div className="w-64 h-36 shrink-0 rounded-lg bg-gray-800/60 border border-gray-700/50 flex items-center justify-center">
+            <p className="text-xs text-gray-500 text-center px-4">No screenshot<br />(Dink auto-claim)</p>
           </div>
-        </button>
+        )}
 
-        {lightbox && (
+        {lightbox && s.imageUrl && (
           <div
             className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
             onClick={() => setLightbox(false)}
@@ -109,23 +140,27 @@ export default function SubmissionReviewer({ submission: s }: { submission: Subm
             </div>
           )}
 
-          <textarea
-            value={reviewNote}
-            onChange={(e) => setReviewNote(e.target.value)}
-            rows={2}
-            placeholder="Review note (optional, shown to player on rejection)"
-            className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none"
-          />
+          {!isApproved && (
+            <textarea
+              value={reviewNote}
+              onChange={(e) => setReviewNote(e.target.value)}
+              rows={2}
+              placeholder="Review note (optional, shown to player on rejection)"
+              className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none"
+            />
+          )}
 
           <div className="flex gap-2">
-            <button
-              onClick={() => decide("APPROVED")}
-              disabled={loading}
-              className="flex-1 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white font-semibold rounded-lg py-2 text-sm transition-colors"
-            >
-              Approve
-            </button>
-            <div className="flex flex-1 rounded-lg overflow-hidden border border-red-700/50">
+            {!isApproved && (
+              <button
+                onClick={() => decide("APPROVED")}
+                disabled={loading}
+                className="flex-1 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white font-semibold rounded-lg py-2 text-sm transition-colors"
+              >
+                Approve
+              </button>
+            )}
+            <div className={`flex rounded-lg overflow-hidden border border-red-700/50 ${isApproved ? "flex-1" : ""}`}>
               <button
                 onClick={() => decide("REJECTED")}
                 disabled={loading}

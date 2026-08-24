@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import BoardTabNav from "@/app/components/BoardTabNav";
 import LeaderboardRow from "./LeaderboardRow";
 import GameFrame from "@/app/components/GameFrame";
+import { checkEventPasscode } from "@/lib/event-passcode";
 
 const BINGO_SWEATS_IMAGES = [
   "/130px-Golden_tench_detail.png",   // 1st
@@ -22,6 +23,7 @@ const WOODEN_SPOON_IMAGES = [
 export default async function LeaderboardPage() {
   const session = await auth();
   if (!session) redirect("/login");
+  await checkEventPasscode(session.user.role);
 
   const [board, users] = await Promise.all([
     prisma.bingoBoard.findFirst({
@@ -108,11 +110,18 @@ export default async function LeaderboardPage() {
                 Max <span className="text-gray-300">{+totalPoints.toFixed(1)}</span> pts
               </p>
             )}
-            <form action={async () => { "use server"; await signOut({ redirectTo: "/login" }); }}>
-              <button type="submit" className="text-xs text-gray-600 hover:text-gray-400 transition-colors">
-                Sign out
-              </button>
-            </form>
+            <div className="flex items-center gap-3">
+              {session.user.role === "ADMIN" && (
+                <a href="/admin" className="text-xs text-amber-500 hover:text-amber-400 transition-colors font-medium">
+                  Admin
+                </a>
+              )}
+              <form action={async () => { "use server"; await signOut({ redirectTo: "/login" }); }}>
+                <button type="submit" className="text-xs text-gray-600 hover:text-gray-400 transition-colors">
+                  Sign out
+                </button>
+              </form>
+            </div>
           </div>
         </div>
 

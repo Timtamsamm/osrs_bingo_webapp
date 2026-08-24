@@ -4,14 +4,17 @@ import { auth, signOut } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
 import BoardTabNav from "@/app/components/BoardTabNav";
 import Countdown from "@/app/components/Countdown";
 import GameFrame from "@/app/components/GameFrame";
+import { checkEventPasscode } from "@/lib/event-passcode";
+import BoardView from "./BoardView";
+import type { TileSummary } from "./BoardView";
 
 export default async function BoardPage() {
   const session = await auth();
   if (!session) redirect("/login");
+  await checkEventPasscode(session.user.role);
 
   const [currentUser, board] = await Promise.all([
     prisma.user.findUnique({
@@ -39,21 +42,21 @@ export default async function BoardPage() {
     return (
       <GameFrame>
         <div className="h-full flex flex-col items-center justify-center p-4">
-        <div className="flex flex-col items-center gap-6 text-center">
-          <div>
-            <h1 className="text-3xl font-bold">{board.name}</h1>
-            {board.description && <p className="text-gray-400 mt-2 text-sm">{board.description}</p>}
+          <div className="flex flex-col items-center gap-6 text-center">
+            <div>
+              <h1 className="text-3xl font-bold">{board.name}</h1>
+              {board.description && <p className="text-gray-400 mt-2 text-sm">{board.description}</p>}
+            </div>
+            <Countdown endsAt={board.startsAt.toISOString()} label="Starts in" reloadOnExpire />
+            <p className="text-sm text-gray-500">
+              {board.startsAt.toLocaleString(undefined, { dateStyle: "long", timeStyle: "short" })}
+            </p>
+            <form action={async () => { "use server"; await signOut({ redirectTo: "/login" }); }}>
+              <button type="submit" className="text-xs text-gray-600 hover:text-gray-400 transition-colors mt-4">
+                Sign out
+              </button>
+            </form>
           </div>
-          <Countdown endsAt={board.startsAt.toISOString()} label="Starts in" reloadOnExpire />
-          <p className="text-sm text-gray-500">
-            {board.startsAt.toLocaleString(undefined, { dateStyle: "long", timeStyle: "short" })}
-          </p>
-          <form action={async () => { "use server"; await signOut({ redirectTo: "/login" }); }}>
-            <button type="submit" className="text-xs text-gray-600 hover:text-gray-400 transition-colors mt-4">
-              Sign out
-            </button>
-          </form>
-        </div>
         </div>
       </GameFrame>
     );
@@ -61,11 +64,36 @@ export default async function BoardPage() {
 
   const earnedPoints = board?.tiles.reduce((sum, tile) => {
     const active = tile.submissions.filter((s) => s.status !== "REJECTED").length;
-    const counted = Math.min(active, tile.requiredCount);
-    return sum + counted * tile.pointsPerSubmission;
+    return sum + Math.min(active, tile.requiredCount) * tile.pointsPerSubmission;
   }, 0) ?? 0;
 
   const totalPoints = board?.tiles.reduce((sum, tile) => sum + tile.points, 0) ?? 0;
+
+  const tiles: TileSummary[] = (board?.tiles ?? []).map((tile) => {
+    const approved = tile.submissions.filter((s) => s.status === "APPROVED").length;
+    const active = tile.submissions.filter((s) => s.status !== "REJECTED").length;
+    const onlyRejected = tile.submissions.length > 0 && active === 0;
+    const completed = approved >= tile.requiredCount;
+    const inProgress = tile.requiredCount > 1 && active > 0 && !completed;
+    const awaiting = !completed && !inProgress && active > 0;
+    return {
+      id: tile.id,
+      title: tile.title,
+      description: tile.description,
+      points: tile.points,
+      pointsPerSubmission: tile.pointsPerSubmission,
+      requiredCount: tile.requiredCount,
+      imageUrl: tile.imageUrl,
+      active,
+      approved,
+      completed,
+      inProgress,
+      awaiting,
+      onlyRejected,
+    };
+  });
+
+  const boardIsEmpty = !board || board.tiles.every((t) => !t.title.trim());
 
   return (
     <GameFrame>
@@ -83,6 +111,11 @@ export default async function BoardPage() {
               </p>
             )}
             <div className="flex items-center gap-3">
+              {currentUser?.role === "ADMIN" && (
+                <Link href="/admin" className="text-xs text-amber-500 hover:text-amber-400 transition-colors font-medium">
+                  Admin
+                </Link>
+              )}
               {currentUser?.role === "PLAYER" && (
                 <Link href="/team" className="text-xs text-gray-500 hover:text-gray-300 transition-colors">
                   My Team
@@ -114,96 +147,15 @@ export default async function BoardPage() {
 
         <BoardTabNav />
 
-        {!board || board.tiles.every((t) => !t.title.trim()) ? (
+        {boardIsEmpty ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <p className="text-4xl mb-4">🔨</p>
             <p className="text-lg font-semibold text-gray-300">The board is still being designed</p>
             <p className="text-sm text-gray-500 mt-1">Check back soon — the next event is being set up.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-5 gap-2">
-            {board.tiles.map((tile) => {
-              const approved = tile.submissions.filter((s) => s.status === "APPROVED").length;
-              const active = tile.submissions.filter((s) => s.status !== "REJECTED").length;
-              const onlyRejected = tile.submissions.length > 0 && active === 0;
-              const completed = approved >= tile.requiredCount;
-              // In progress = multi-tile with at least one active submission but not done
-              const inProgress = tile.requiredCount > 1 && active > 0 && !completed;
-              // Awaiting = single-tile (or multi with no approved yet) submitted but pending review
-              const awaiting = !completed && !inProgress && active > 0;
-
-              let borderStyle: string;
-              let bgStyle: string;
-              let textStyle: string;
-
-              if (completed) {
-                borderStyle = "border-green-500";
-                bgStyle = "bg-green-500/15";
-                textStyle = "text-green-200";
-              } else if (inProgress) {
-                borderStyle = "border-orange-500";
-                bgStyle = "bg-orange-500/10";
-                textStyle = "text-orange-200";
-              } else if (awaiting) {
-                borderStyle = "border-green-700";
-                bgStyle = "bg-green-900/15";
-                textStyle = "text-gray-200";
-              } else if (onlyRejected) {
-                borderStyle = "border-red-700";
-                bgStyle = "bg-red-900/10";
-                textStyle = "text-gray-300";
-              } else {
-                borderStyle = "border-stone-600/80 hover:border-amber-700/60";
-                bgStyle = "bg-stone-900/80";
-                textStyle = "text-gray-300";
-              }
-
-              return (
-                <Link
-                  key={tile.id}
-                  href={`/submit?tileId=${tile.id}`}
-                  className={`relative aspect-square rounded-xl border-2 text-xs font-medium transition-all hover:scale-[1.03] overflow-hidden ${borderStyle} ${bgStyle}`}
-                >
-                  {/* Full-tile image */}
-                  {tile.imageUrl && (
-                    <Image
-                      src={tile.imageUrl}
-                      alt={tile.title}
-                      fill
-                      sizes="160px"
-                      className="object-cover"
-                    />
-                  )}
-
-                  {/* State colour tint over image */}
-                  {tile.imageUrl && <div className={`absolute inset-0 ${bgStyle} opacity-50`} />}
-
-                  {/* Status badge */}
-                  <div className="absolute top-1.5 right-1.5 z-10">
-                    {completed  && <span className="text-green-400 text-sm leading-none">✓</span>}
-                    {inProgress && <span className="text-orange-400 text-xs font-bold leading-none">{active}/{tile.requiredCount}</span>}
-                    {awaiting   && <span className="block w-2 h-2 rounded-full bg-green-500" />}
-                    {onlyRejected && <span className="text-red-400 text-sm leading-none">✕</span>}
-                  </div>
-
-                  {/* Text — gradient overlay at bottom */}
-                  <div className="absolute bottom-0 left-0 right-0 z-10 px-1.5 pt-4 pb-1.5 text-center bg-gradient-to-t from-black/80 to-transparent">
-                    <p className={`line-clamp-2 leading-tight ${textStyle}`}>{tile.title}</p>
-                    <p className="text-gray-400 text-xs mt-0.5">{+tile.points.toFixed(1)}pt</p>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
+          <BoardView tiles={tiles} />
         )}
-
-        <div className="flex flex-wrap gap-4 mt-6 text-xs text-gray-500">
-          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded border-2 border-green-500 bg-green-500/15" />Completed</span>
-          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded border-2 border-orange-500 bg-orange-500/10" />In progress</span>
-          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded border-2 border-green-700 bg-green-900/15" />Awaiting review</span>
-          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded border-2 border-red-700 bg-red-900/10" />Rejected</span>
-          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded border-2 border-stone-600/80 bg-stone-900/80" />Not started</span>
-        </div>
       </div>
     </GameFrame>
   );

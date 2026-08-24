@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import TileImageCropper from "./TileImageCropper";
@@ -13,6 +13,7 @@ interface Tile {
   pointsPerSubmission: number;
   requiredCount: number;
   imageUrl: string | null;
+  dinkItems: Array<{ id: number; name: string }>;
 }
 
 interface Board {
@@ -22,7 +23,28 @@ interface Board {
   startsAt: Date | null;
   endsAt: Date | null;
   maxTeamSize: number;
+  passcode: string | null;
+  dinkToken: string | null;
   tiles: Tile[];
+}
+
+function parseDinkItems(text: string): Array<{ id: number; name: string }> {
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .flatMap((line) => {
+      const spaceIdx = line.indexOf(" ");
+      if (spaceIdx === -1) return [];
+      const id = parseInt(line.slice(0, spaceIdx), 10);
+      const name = line.slice(spaceIdx + 1).trim();
+      if (isNaN(id) || !name) return [];
+      return [{ id, name }];
+    });
+}
+
+function dinkItemsToText(items: Array<{ id: number; name: string }>): string {
+  return items.map((i) => `${i.id} ${i.name}`).join("\n");
 }
 
 function toDatetimeLocal(date: Date | null): string {
@@ -35,7 +57,7 @@ interface Props {
   board: Board | null;
 }
 
-const EMPTY_TILE = { title: "", description: "", pointsPerSubmission: 1, requiredCount: 1, imageUrl: null as string | null };
+const EMPTY_TILE = { title: "", description: "", pointsPerSubmission: 1, requiredCount: 1, imageUrl: null as string | null, dinkItemsText: "" };
 
 export default function BoardEditor({ board }: Props) {
   const router = useRouter();
@@ -47,13 +69,29 @@ export default function BoardEditor({ board }: Props) {
   const [boardStartsAt, setBoardStartsAt] = useState(toDatetimeLocal(board?.startsAt ?? null));
   const [boardEndsAt, setBoardEndsAt] = useState(toDatetimeLocal(board?.endsAt ?? null));
   const [boardMaxTeamSize, setBoardMaxTeamSize] = useState(board?.maxTeamSize ?? 10);
+  const [boardPasscode, setBoardPasscode] = useState(board?.passcode ?? "");
+  const [boardDinkToken, setBoardDinkToken] = useState(board?.dinkToken ?? "");
+
+  const generateDinkToken = useCallback(() => {
+    const token = Array.from(crypto.getRandomValues(new Uint8Array(18)))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    setBoardDinkToken(token);
+  }, []);
 
   const [tiles, setTiles] = useState<Record<number, typeof EMPTY_TILE>>(() => {
     const map: Record<number, typeof EMPTY_TILE> = {};
     for (let i = 0; i < 25; i++) {
       const t = board?.tiles.find((t) => t.position === i);
       map[i] = t
-        ? { title: t.title, description: t.description ?? "", pointsPerSubmission: t.pointsPerSubmission ?? 1, requiredCount: t.requiredCount, imageUrl: t.imageUrl ?? null }
+        ? {
+            title: t.title,
+            description: t.description ?? "",
+            pointsPerSubmission: t.pointsPerSubmission ?? 1,
+            requiredCount: t.requiredCount,
+            imageUrl: t.imageUrl ?? null,
+            dinkItemsText: dinkItemsToText(t.dinkItems ?? []),
+          }
         : { ...EMPTY_TILE };
     }
     return map;
@@ -99,6 +137,12 @@ export default function BoardEditor({ board }: Props) {
     setSaving(true);
     setError("");
     try {
+      const tilesPayload = Object.fromEntries(
+        Object.entries(tiles).map(([pos, t]) => [
+          pos,
+          { ...t, dinkItems: parseDinkItems(t.dinkItemsText) },
+        ])
+      );
       const res = await fetch("/api/admin/board", {
         method: board ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
@@ -109,7 +153,9 @@ export default function BoardEditor({ board }: Props) {
           startsAt: boardStartsAt ? new Date(boardStartsAt).toISOString() : null,
           endsAt: boardEndsAt ? new Date(boardEndsAt).toISOString() : null,
           maxTeamSize: boardMaxTeamSize,
-          tiles,
+          passcode: boardPasscode,
+          dinkToken: boardDinkToken,
+          tiles: tilesPayload,
         }),
       });
       if (!res.ok) throw new Error(await res.text());
@@ -148,6 +194,50 @@ export default function BoardEditor({ board }: Props) {
             />
           </div>
         </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs text-gray-400">Event passcode (optional)</label>
+          <div className="flex gap-2 items-center">
+            <input
+              value={boardPasscode}
+              onChange={(e) => setBoardPasscode(e.target.value)}
+              placeholder="Leave blank to disable the passcode gate"
+              className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono"
+            />
+            {boardPasscode && (
+              <button type="button" onClick={() => setBoardPasscode("")} className="text-xs text-gray-500 hover:text-red-400 transition-colors shrink-0">
+                Clear
+              </button>
+            )}
+          </div>
+          <p className="text-xs text-gray-600">Players must enter this once after login. Changing it invalidates all existing verifications.</p>
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <label className="text-xs text-gray-400">Dink webhook token (optional)</label>
+          <div className="flex gap-2 items-center">
+            <input
+              value={boardDinkToken}
+              onChange={(e) => setBoardDinkToken(e.target.value)}
+              placeholder="Leave blank to disable Dink integration"
+              className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono"
+            />
+            <button type="button" onClick={generateDinkToken} className="text-xs bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-lg px-3 py-2 transition-colors shrink-0">
+              Generate
+            </button>
+            {boardDinkToken && (
+              <button type="button" onClick={() => setBoardDinkToken("")} className="text-xs text-gray-500 hover:text-red-400 transition-colors shrink-0">
+                Clear
+              </button>
+            )}
+          </div>
+          {boardDinkToken && (
+            <p className="text-xs text-gray-500 font-mono break-all mt-1">
+              Webhook URL: <span className="text-amber-400/80 select-all">/api/webhook/dink?token={boardDinkToken}</span>
+            </p>
+          )}
+          <p className="text-xs text-gray-600">Players paste this URL into Dink → Webhook URLs. Drops matching tile item IDs auto-approve.</p>
+        </div>
+
         <div className="flex gap-4 items-start">
           <div className="flex flex-col gap-1 w-32 shrink-0">
             <label className="text-xs text-gray-400">Max team size</label>
@@ -281,6 +371,18 @@ export default function BoardEditor({ board }: Props) {
                   {+((selectedTile!.requiredCount || 1) * (selectedTile!.pointsPerSubmission || 1)).toFixed(2)}
                 </span>
               </p>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-gray-400">Dink item IDs (optional)</label>
+                <textarea
+                  value={selectedTile!.dinkItemsText}
+                  onChange={(e) => updateTile(selected, "dinkItemsText", e.target.value)}
+                  rows={3}
+                  placeholder={"4151 Abyssal whip\n12073 Twisted bow"}
+                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none"
+                />
+                <p className="text-xs text-gray-600">One item per line: <span className="font-mono text-gray-500">itemId item name</span>. Dink auto-claims when a player loots a matching item.</p>
+              </div>
 
               <div className="flex flex-col gap-2">
                 <label className="text-xs text-gray-400">Tile image (optional)</label>

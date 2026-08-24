@@ -1,5 +1,7 @@
 generator client {
   provider      = "prisma-client-js"
+  // "native" = local dev; "rhel-openssl-3.0.x" = Vercel's serverless Linux environment.
+  // If deploying elsewhere add the matching target (e.g. "debian-openssl-3.0.x" for Render/Railway).
   binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
@@ -75,6 +77,8 @@ model BingoBoard {
   startsAt    DateTime?
   endsAt      DateTime?
   maxTeamSize Int               @default(10)
+  passcode    String?           // optional event passcode — players must enter this once after login
+  dinkToken   String?           // token players put in Dink's webhook URL (?token=xxx)
   createdAt   DateTime          @default(now())
   tiles       BingoTile[]
   snapshots   PlayerSnapshot[]
@@ -100,6 +104,7 @@ model BingoTile {
   points              Float    @default(1)
   pointsPerSubmission Float    @default(1)
   imageUrl            String?  // reference/example image
+  dinkItems           Json     @default("[]")  // [{id: number, name: string}] — OSRS item IDs Dink auto-claims for this tile
 
   requiredCount Int          @default(1)
   autoApprove   Boolean      @default(false)
@@ -114,11 +119,14 @@ model Submission {
   id         String           @id @default(cuid())
   userId     String
   tileId     String
-  imageUrl   String           // Vercel Blob URL
+  imageUrl   String?          // Vercel Blob URL (null for Dink submissions with no screenshot)
   status     SubmissionStatus @default(PENDING)
   note       String?          // player note
   reviewNote String?          // admin feedback
-  teamMember String?          // which team member submitted
+  teamMember String?          // which team member submitted / RSN for Dink
+  source     String           @default("manual")  // "manual" | "dink"
+  dinkItemId   Int?           // OSRS item ID that triggered this (duplicate detection)
+  dinkItemName String?        // item name for display in admin queue
   createdAt  DateTime         @default(now())
   reviewedAt DateTime?
 

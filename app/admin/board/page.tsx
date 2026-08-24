@@ -8,6 +8,7 @@ export default async function AdminBoardPage() {
     prisma.bingoBoard.findFirst({
       where: { active: true },
       include: { tiles: { orderBy: { position: "asc" } } },
+      // passcode is automatically included via include — no extra select needed
     }),
     prisma.bingoBoard.findFirst({
       where: { active: true },

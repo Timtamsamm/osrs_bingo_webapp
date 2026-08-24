@@ -6,6 +6,8 @@ function createPrismaClient() {
   return new PrismaClient({ adapter });
 }
 
+// Reuse a single PrismaClient instance across hot-reloads in development.
+// Without this, every file save would open a new DB connection and exhaust the pool.
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
 
 export const prisma = globalForPrisma.prisma ?? createPrismaClient();

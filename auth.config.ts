@@ -9,7 +9,8 @@ export const authConfig: NextAuthConfig = {
     authorized({ auth, request: { nextUrl } }) {
       const isLoggedIn = !!auth?.user
       const { pathname } = nextUrl
-      if (pathname.startsWith("/api/auth") || pathname === "/login") return true
+      // Always allow auth API routes, the login page, and inbound webhooks
+      if (pathname.startsWith("/api/auth") || pathname === "/login" || pathname.startsWith("/api/webhook")) return true
       return isLoggedIn
     },
     jwt({ token, user }) {

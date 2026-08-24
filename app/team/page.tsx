@@ -6,10 +6,12 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import TeamEditor from "./TeamEditor";
 import GameFrame from "@/app/components/GameFrame";
+import { checkEventPasscode } from "@/lib/event-passcode";
 
 export default async function TeamPage() {
   const session = await auth();
   if (!session) redirect("/login");
+  await checkEventPasscode(session.user.role);
 
   const [user, board] = await Promise.all([
     prisma.user.findUnique({

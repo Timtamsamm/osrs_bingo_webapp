@@ -7,6 +7,7 @@ import SubmitForm from "./SubmitForm";
 import Link from "next/link";
 import Image from "next/image";
 import GameFrame from "@/app/components/GameFrame";
+import { checkEventPasscode } from "@/lib/event-passcode";
 
 interface Props {
   searchParams: Promise<{ tileId?: string }>;
@@ -21,6 +22,7 @@ const statusLabel: Record<string, { label: string; className: string }> = {
 export default async function SubmitPage({ searchParams }: Props) {
   const session = await auth();
   if (!session) redirect("/login");
+  await checkEventPasscode(session.user.role);
 
   const { tileId } = await searchParams;
   if (!tileId) redirect("/board");

@@ -7,10 +7,12 @@ import BoardTabNav from "@/app/components/BoardTabNav";
 import PlayersFilter from "./PlayersFilter";
 import GameFrame from "@/app/components/GameFrame";
 import type { BossKCs } from "@/lib/temple";
+import { checkEventPasscode } from "@/lib/event-passcode";
 
 export default async function PlayersPage() {
   const session = await auth();
   if (!session) redirect("/login");
+  await checkEventPasscode(session.user.role);
 
   const [board, users] = await Promise.all([
     prisma.bingoBoard.findFirst({
@@ -64,12 +66,17 @@ export default async function PlayersPage() {
         <div className="relative mb-6 text-center pt-3">
           <h1 className="text-2xl font-bold">{board?.name ?? "Bingo Board"}</h1>
           <p className="text-gray-400 text-sm mt-1">Players</p>
-          <div className="absolute right-0 top-0">
-          <form action={async () => { "use server"; await signOut({ redirectTo: "/login" }); }}>
-            <button type="submit" className="text-xs text-gray-600 hover:text-gray-400 transition-colors">
-              Sign out
-            </button>
-          </form>
+          <div className="absolute right-0 top-0 flex items-center gap-3">
+            {session.user.role === "ADMIN" && (
+              <a href="/admin" className="text-xs text-amber-500 hover:text-amber-400 transition-colors font-medium">
+                Admin
+              </a>
+            )}
+            <form action={async () => { "use server"; await signOut({ redirectTo: "/login" }); }}>
+              <button type="submit" className="text-xs text-gray-600 hover:text-gray-400 transition-colors">
+                Sign out
+              </button>
+            </form>
           </div>
         </div>
 
