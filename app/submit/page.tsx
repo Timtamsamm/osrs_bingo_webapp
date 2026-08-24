@@ -78,13 +78,19 @@ export default async function SubmitPage({ searchParams }: Props) {
               return (
                 <div key={sub.id} className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
                   <div className="relative w-full aspect-video">
-                    <Image
-                      src={sub.imageUrl}
-                      alt="Your submission"
-                      fill
-                      sizes="(max-width: 512px) 100vw, 512px"
-                      className="object-cover"
-                    />
+                    {sub.imageUrl ? (
+                      <Image
+                        src={sub.imageUrl}
+                        alt="Your submission"
+                        fill
+                        sizes="(max-width: 512px) 100vw, 512px"
+                        className="object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-gray-800 flex items-center justify-center">
+                        <p className="text-xs text-gray-500">Auto-submitted via Dink</p>
+                      </div>
+                    )}
                   </div>
                   <div className="px-4 py-3 flex items-start justify-between gap-3">
                     <div className="flex flex-col gap-1">
