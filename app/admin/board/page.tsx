@@ -29,7 +29,13 @@ export default async function AdminBoardPage() {
     <div className="max-w-4xl flex flex-col gap-10">
       <div>
         <h1 className="text-2xl font-bold mb-8">Board & Tiles</h1>
-        <BoardEditor board={board} />
+        <BoardEditor board={board ? {
+          ...board,
+          tiles: board.tiles.map((t) => ({
+            ...t,
+            dinkItems: (t.dinkItems ?? []) as Array<{ id: number; name: string }>,
+          })),
+        } : null} />
       </div>
 
       <div>
