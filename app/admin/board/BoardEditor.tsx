@@ -13,7 +13,7 @@ interface Tile {
   pointsPerSubmission: number;
   requiredCount: number;
   imageUrl: string | null;
-  dinkItems: Array<{ id: number; name: string }>;
+  dinkItems: Array<{ id: number; name: string }> | null;
 }
 
 interface Board {
@@ -43,8 +43,8 @@ function parseDinkItems(text: string): Array<{ id: number; name: string }> {
     });
 }
 
-function dinkItemsToText(items: Array<{ id: number; name: string }>): string {
-  return items.map((i) => `${i.id} ${i.name}`).join("\n");
+function dinkItemsToText(items: Array<{ id: number; name: string }> | null): string {
+  return (items ?? []).map((i) => `${i.id} ${i.name}`).join("\n");
 }
 
 function toDatetimeLocal(date: Date | null): string {
