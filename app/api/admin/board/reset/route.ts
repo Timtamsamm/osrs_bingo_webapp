@@ -49,7 +49,7 @@ export async function DELETE() {
 
   // Clean up Blobs after DB changes succeed
   const blobsToDelete = [
-    ...submissions.map((s) => s.imageUrl),
+    ...submissions.map((s) => s.imageUrl).filter((u): u is string => u !== null),
     ...tileImageUrls,
   ];
   if (blobsToDelete.length > 0) {
