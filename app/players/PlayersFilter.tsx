@@ -8,6 +8,7 @@ export type PlayerEntry = {
   memberName: string;
   teamName: string;
   snapshot: BossKCs | null;
+  ehb: number | null;
 };
 
 interface Props {
@@ -77,10 +78,10 @@ export default function PlayersFilter({ players, teams, bosses }: Props) {
         <p className="text-purple-500/60 text-sm">No players match the current filters.</p>
       ) : (
         <div className="flex flex-col gap-2">
-          {filtered.map(({ memberName, teamName, snapshot }) => (
+          {filtered.map(({ memberName, teamName, snapshot, ehb }) => (
             <div key={memberName}>
               <p className="text-xs text-purple-700/70 mb-1 px-1">{teamName}</p>
-              <PlayerCard memberName={memberName} snapshot={snapshot} />
+              <PlayerCard memberName={memberName} snapshot={snapshot} ehb={ehb} />
             </div>
           ))}
         </div>

@@ -1,7 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import SubmissionReviewer from "./SubmissionReviewer";
 import TeamFilter from "./TeamFilter";
+import ManualAwardForm from "./ManualAwardForm";
 import { Suspense } from "react";
+
+type TierDef = { tier: 1 | 2 | 3; points: number; requiredCount: number; dinkItems: Array<{ id: number; name: string }> };
 
 interface Props {
   searchParams: Promise<{ team?: string }>;
@@ -12,7 +15,7 @@ export default async function AdminSubmissionsPage({ searchParams }: Props) {
 
   const teamFilter = team ? { team: { name: team } } : {};
 
-  const [pending, dinkApproved, allTeams] = await Promise.all([
+  const [pending, dinkApproved, allTeams, awardTeams, activeBoard] = await Promise.all([
     prisma.submission.findMany({
       where: { status: "PENDING", ...teamFilter },
       orderBy: { createdAt: "asc" },
@@ -35,9 +38,18 @@ export default async function AdminSubmissionsPage({ searchParams }: Props) {
       select: { name: true },
       orderBy: { name: "asc" },
     }),
+    prisma.team.findMany({
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+    prisma.bingoBoard.findFirst({
+      where: { active: true },
+      select: { tiles: { select: { id: true, title: true, tiers: true }, orderBy: { position: "asc" } } },
+    }),
   ]);
 
   const teamNames = allTeams.map((t) => t.name);
+  const awardTiles = (activeBoard?.tiles ?? []).map((t) => ({ id: t.id, title: t.title, tiers: (t.tiers as TierDef[]) ?? [] }));
 
   return (
     <div>
@@ -52,6 +64,8 @@ export default async function AdminSubmissionsPage({ searchParams }: Props) {
           </Suspense>
         </div>
       </div>
+
+      <ManualAwardForm teams={awardTeams} tiles={awardTiles} />
 
       {pending.length === 0 ? (
         <p className="text-purple-600/70">{team ? `No pending submissions for ${team}.` : "No pending submissions."}</p>

@@ -12,9 +12,10 @@ type LoadState =
 interface Props {
   memberName: string;
   snapshot: BossKCs | null;
+  ehb: number | null;
 }
 
-export default function PlayerCard({ memberName, snapshot }: Props) {
+export default function PlayerCard({ memberName, snapshot, ehb }: Props) {
   const [loadState, setLoadState] = useState<LoadState>({ status: "idle" });
   const [expanded, setExpanded] = useState(false);
 
@@ -52,7 +53,12 @@ export default function PlayerCard({ memberName, snapshot }: Props) {
         className="w-full px-5 py-4 flex items-center gap-4 bg-stone-900/90 hover:bg-stone-800/90 transition-colors text-left"
       >
         <div className="flex-1 min-w-0">
-          <p className="font-semibold text-white">{memberName}</p>
+          <div className="flex items-center gap-2">
+            <p className="font-semibold text-white">{memberName}</p>
+            {ehb !== null && (
+              <span className="text-xs font-semibold text-amber-400 tabular-nums shrink-0">{Math.round(ehb)} EHB</span>
+            )}
+          </div>
           {!hasSnapshot && (
             <p className="text-xs text-amber-500 mt-0.5">No snapshot — kills will show current totals</p>
           )}

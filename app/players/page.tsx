@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import BoardTabNav from "@/app/components/BoardTabNav";
 import PlayersFilter from "./PlayersFilter";
 import type { BossKCs } from "@/lib/temple";
+import { fetchTempleStats } from "@/lib/templeosrs";
 import Link from "next/link";
 
 export default async function PlayersPage() {
@@ -26,10 +27,13 @@ export default async function PlayersPage() {
     snapshotMap.set(s.memberName.toLowerCase(), s.bosses as BossKCs);
   }
 
-  const players = participants.map((p) => ({
+  const ehbList = await Promise.all(participants.map((p) => fetchTempleStats(p.rsn)));
+
+  const players = participants.map((p, i) => ({
     memberName: p.rsn,
     teamName: p.team.name,
     snapshot: snapshotMap.get(p.rsn.toLowerCase()) ?? null,
+    ehb: ehbList[i]?.ehb ?? null,
   }));
 
   const teams = [...new Set(participants.map((p) => p.team.name))].sort();
