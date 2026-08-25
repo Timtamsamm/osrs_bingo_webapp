@@ -14,6 +14,7 @@ export type TileTier = {
   tier: number;
   points: number;
   requiredCount: number;
+  description: string | null;
 };
 
 export type TileSummary = {
@@ -233,16 +234,19 @@ function TileDetailModal({ tile, teams, onClose }: { tile: TileSummary; teams: T
               sortedTiers.map((td) => (
                 <div
                   key={td.tier}
-                  className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-[#130a28]/60 border border-purple-900/30"
+                  className="flex flex-col gap-1 px-3 py-2 rounded-lg bg-[#130a28]/60 border border-purple-900/30"
                 >
-                  <div>
-                    <span className="text-sm font-bold text-purple-100">T{td.tier}</span>
-                    <span className="text-xs text-purple-600 ml-1.5">({TIER_LABEL[td.tier] ?? "—"})</span>
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <span className="text-sm font-bold text-purple-100">T{td.tier}</span>
+                      <span className="text-xs text-purple-600 ml-1.5">({TIER_LABEL[td.tier] ?? "—"})</span>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="text-sm font-semibold text-white">{+td.points.toFixed(1)} pts</span>
+                      <span className="text-xs text-purple-500 ml-2">{td.requiredCount}× required</span>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <span className="text-sm font-semibold text-white">{+td.points.toFixed(1)} pts</span>
-                    <span className="text-xs text-purple-500 ml-2">{td.requiredCount}× required</span>
-                  </div>
+                  {td.description && <p className="text-xs text-purple-400/80">{td.description}</p>}
                 </div>
               ))
             )}

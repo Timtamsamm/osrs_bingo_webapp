@@ -2,7 +2,7 @@
  * Shared team-standings scoring — used by the board page, the teams index,
  * and the per-team page's rank calculation, so all three always agree.
  */
-export type TierDef = { tier: number; points: number; requiredCount: number; dinkItems: Array<{ id: number; name: string }> };
+export type TierDef = { tier: number; points: number; requiredCount: number; description?: string; dinkItems: Array<{ id: number; name: string }> };
 export type BonusConfig = { t1: number; t2: number; t3: number };
 
 export interface TileForScoring {

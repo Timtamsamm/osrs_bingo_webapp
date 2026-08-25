@@ -9,6 +9,7 @@ export interface TierDef {
   tier: 1 | 2 | 3;
   points: number;
   requiredCount: number;
+  description?: string;
   dinkItems: Array<{ id: number; name: string }>;
 }
 
@@ -64,6 +65,7 @@ function toDatetimeLocal(date: Date | null): string {
 interface TierState {
   points: number;
   requiredCount: number;
+  description: string;
   dinkItemsText: string;
 }
 
@@ -76,14 +78,14 @@ interface TileState {
   t3: TierState;
 }
 
-const EMPTY_TIER: TierState = { points: 1, requiredCount: 1, dinkItemsText: "" };
+const EMPTY_TIER: TierState = { points: 1, requiredCount: 1, description: "", dinkItemsText: "" };
 
 function makeTileState(t: Tile | undefined): TileState {
   if (!t) return { title: "", description: "", imageUrl: null, t1: { ...EMPTY_TIER }, t2: { ...EMPTY_TIER }, t3: { ...EMPTY_TIER } };
   const tiers = t.tiers ?? [];
   const getTier = (n: 1 | 2 | 3): TierState => {
     const td = tiers.find((d) => d.tier === n);
-    return td ? { points: td.points, requiredCount: td.requiredCount, dinkItemsText: dinkItemsToText(td.dinkItems) } : { ...EMPTY_TIER };
+    return td ? { points: td.points, requiredCount: td.requiredCount, description: td.description ?? "", dinkItemsText: dinkItemsToText(td.dinkItems) } : { ...EMPTY_TIER };
   };
   return { title: t.title, description: t.description ?? "", imageUrl: t.imageUrl ?? null, t1: getTier(1), t2: getTier(2), t3: getTier(3) };
 }
@@ -93,7 +95,7 @@ function stateToTiers(t: TileState): TierDef[] {
   for (const [tierNum, ts] of [[3, t.t3], [2, t.t2], [1, t.t1]] as [1 | 2 | 3, TierState][]) {
     const items = parseDinkItems(ts.dinkItemsText);
     if (items.length > 0) {
-      result.push({ tier: tierNum, points: ts.points, requiredCount: ts.requiredCount, dinkItems: items });
+      result.push({ tier: tierNum, points: ts.points, requiredCount: ts.requiredCount, description: ts.description.trim(), dinkItems: items });
     }
   }
   return result;
@@ -404,6 +406,16 @@ export default function BoardEditor({ board }: Props) {
                             {ts.requiredCount}× · {+ts.points.toFixed(1)} pts
                           </span>
                         )}
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className={labelCls}>Description (optional)</label>
+                        <input
+                          type="text"
+                          value={ts.description}
+                          onChange={(e) => updateTier(selected, tierKey, "description", e.target.value)}
+                          placeholder="What specifically this tier requires"
+                          className={inputCls}
+                        />
                       </div>
                       <div className="flex gap-3 items-start">
                         <div className="flex flex-col gap-1 w-24 shrink-0">

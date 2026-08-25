@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 
 type DinkItem = { id: number; name: string };
-type TierDef = { tier: 1 | 2 | 3; points: number; requiredCount: number; dinkItems: DinkItem[] };
+type TierDef = { tier: 1 | 2 | 3; points: number; requiredCount: number; description?: string; dinkItems: DinkItem[] };
 type TileInput = { title: string; description: string; imageUrl?: string; tiers: TierDef[] };
 
 async function requireAdmin() {
