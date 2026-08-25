@@ -5,24 +5,47 @@ import { SpeedInsights } from "@vercel/speed-insights/next";
 import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import LeadColorAmbience from "@/app/components/LeadColorAmbience";
+import { computeStandings, type TierDef } from "@/lib/scoring";
 import "./globals.css";
 
 const getLeadingTeamColor = unstable_cache(
   async (): Promise<string> => {
-    const [teams, topGroup] = await Promise.all([
-      prisma.team.findMany({ select: { id: true, color: true } }),
-      prisma.submission.groupBy({
-        by: ["teamId"],
-        where: { status: "APPROVED", teamId: { not: null } },
-        _count: { id: true },
-        orderBy: { _count: { id: "desc" } },
-        take: 1,
+    const [board, teams] = await Promise.all([
+      prisma.bingoBoard.findFirst({
+        where: { active: true },
+        select: {
+          rowColBonuses: true,
+          tiles: {
+            select: {
+              id: true,
+              position: true,
+              title: true,
+              tiers: true,
+              submissions: {
+                where: { status: { not: "REJECTED" }, teamId: { not: null } },
+                select: { teamId: true, status: true, tier: true },
+              },
+            },
+          },
+        },
       }),
+      prisma.team.findMany({ select: { id: true, name: true, color: true } }),
     ]);
 
-    const leadingId = topGroup[0]?.teamId;
-    if (!leadingId) return "#c9aa71"; // OSRS gold — default when no team leads
-    return teams.find((t) => t.id === leadingId)?.color ?? "#c9aa71";
+    const rawBonuses = board?.rowColBonuses as { t1?: number; t2?: number; t3?: number } | null;
+    const bonusConfig = { t1: rawBonuses?.t1 ?? 0, t2: rawBonuses?.t2 ?? 0, t3: rawBonuses?.t3 ?? 0 };
+    const scoringTiles = (board?.tiles ?? []).map((t) => ({
+      id: t.id,
+      position: t.position,
+      title: t.title,
+      tiers: (t.tiers as TierDef[]) ?? [],
+      submissions: t.submissions,
+    }));
+
+    const { standings } = computeStandings(scoringTiles, teams, bonusConfig);
+    const leader = standings[0];
+    if (!leader || leader.earnedPoints <= 0) return "#c9aa71"; // OSRS gold — default when no team leads
+    return leader.color;
   },
   ["leading-team-color"],
   { revalidate: 30 }
