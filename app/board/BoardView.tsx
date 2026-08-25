@@ -10,12 +10,19 @@ export type TeamStatus = {
   achievedTiers: number[];
 };
 
+export type TileTier = {
+  tier: number;
+  points: number;
+  requiredCount: number;
+};
+
 export type TileSummary = {
   id: string;
   position: number;
   title: string;
   description: string | null;
   points: number;
+  tiers: TileTier[];
   imageUrl: string | null;
   teamStatuses: TeamStatus[];
 };
@@ -58,9 +65,9 @@ interface Props {
 function tileGlowClass(tile: TileSummary) {
   const anyComplete = tile.teamStatuses.some((s) => s.completed);
   const anyProgress = tile.teamStatuses.some((s) => s.inProgress);
-  if (anyComplete) return "tile-glow-complete border-green-500/70";
-  if (anyProgress) return "tile-glow-progress accent-border";
-  return "border-purple-900/40 hover:border-purple-700/50";
+  if (anyComplete) return "tile-glow-complete";
+  if (anyProgress) return "tile-glow-progress";
+  return "";
 }
 
 function contrastColor(hex: string): string {
@@ -169,8 +176,106 @@ function LineIndicator({
   );
 }
 
+const TIER_LABEL: Record<number, string> = { 1: "Hardest", 2: "Medium", 3: "Easiest" };
+
+function TileDetailModal({ tile, teams, onClose }: { tile: TileSummary; teams: TeamInfo[]; onClose: () => void }) {
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [onClose]);
+
+  const sortedTiers = [...tile.tiers].sort((a, b) => a.tier - b.tier);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-[#0e0820] border border-purple-900/50 rounded-2xl max-w-md w-full max-h-[85vh] overflow-y-auto purple-glow-sm"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {tile.imageUrl && (
+          <div className="relative w-full aspect-video overflow-hidden">
+            <Image src={tile.imageUrl} alt={tile.title} fill sizes="400px" className="object-cover" />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#0e0820] via-transparent to-transparent" />
+          </div>
+        )}
+
+        <div className="p-5 flex flex-col gap-4">
+          <div className="flex items-start justify-between gap-3">
+            <h3 className="font-[family-name:var(--font-cinzel)] text-xl font-bold text-white heading-glow">{tile.title}</h3>
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-purple-500 hover:text-white transition-colors text-xl leading-none shrink-0"
+              aria-label="Close"
+            >
+              ✕
+            </button>
+          </div>
+
+          {tile.description && <p className="text-sm text-purple-300/80">{tile.description}</p>}
+
+          <div className="flex flex-col gap-2">
+            <p className="text-xs tracking-[0.2em] text-purple-500 uppercase font-semibold">Tiers</p>
+            {sortedTiers.length === 0 ? (
+              <p className="text-sm text-purple-600/70">No tiers configured yet.</p>
+            ) : (
+              sortedTiers.map((td) => (
+                <div
+                  key={td.tier}
+                  className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-[#130a28]/60 border border-purple-900/30"
+                >
+                  <div>
+                    <span className="text-sm font-bold text-purple-100">T{td.tier}</span>
+                    <span className="text-xs text-purple-600 ml-1.5">({TIER_LABEL[td.tier] ?? "—"})</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-sm font-semibold text-white">{+td.points.toFixed(1)} pts</span>
+                    <span className="text-xs text-purple-500 ml-2">{td.requiredCount}× required</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {teams.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <p className="text-xs tracking-[0.2em] text-purple-500 uppercase font-semibold">Team progress</p>
+              <div className="flex flex-col gap-1.5">
+                {teams.map((team) => {
+                  const status = tile.teamStatuses.find((s) => s.teamId === team.id);
+                  const achieved = status?.achievedTiers ?? [];
+                  const label = achieved.length > 0 ? `T${[...achieved].sort().join(", T")}` : "Not started";
+                  return (
+                    <div key={team.id} className="flex items-center gap-2 text-sm">
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ background: team.color, boxShadow: `0 0 4px ${team.color}` }} />
+                      <span className="text-purple-200 flex-1 truncate">{team.name}</span>
+                      <span className="text-xs text-purple-500 shrink-0">{label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function BoardView({ tiles, teams, rowSummaries, colSummaries, bonusConfig, size }: Props) {
   const [view, setView] = useState<View>("grid");
+  const [detailTile, setDetailTile] = useState<TileSummary | null>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem("boardView") as View | null;
@@ -246,7 +351,8 @@ export default function BoardView({ tiles, teams, rowSummaries, colSummaries, bo
               return (
                 <div
                   key={tile.id}
-                  className={`relative rounded-xl border bg-surface/80 overflow-hidden flex flex-col transition-all duration-200 ${glow}`}
+                  onClick={() => setDetailTile(tile)}
+                  className={`relative rounded-xl tile-metal-frame bg-surface/80 overflow-hidden flex flex-col transition-all duration-200 cursor-pointer hover:brightness-110 ${glow}`}
                   style={{ aspectRatio: "1/1" }}
                 >
                   {tile.imageUrl && (
@@ -313,7 +419,11 @@ export default function BoardView({ tiles, teams, rowSummaries, colSummaries, bo
           {tiles.map((tile) => {
             const glow = tileGlowClass(tile);
             return (
-              <div key={tile.id} className={`flex items-center gap-3 rounded-xl border bg-surface/80 px-4 py-3 transition-all ${glow}`}>
+              <div
+                key={tile.id}
+                onClick={() => setDetailTile(tile)}
+                className={`flex items-center gap-3 rounded-xl border border-purple-900/40 hover:border-purple-700/50 bg-surface/80 px-4 py-3 transition-all cursor-pointer ${glow}`}
+              >
                 {tile.imageUrl && (
                   <div className="relative w-10 h-10 rounded-lg overflow-hidden shrink-0">
                     <Image src={tile.imageUrl} alt={tile.title} fill sizes="40px" className="object-cover" />
@@ -353,6 +463,8 @@ export default function BoardView({ tiles, teams, rowSummaries, colSummaries, bo
           </span>
         </div>
       )}
+
+      {detailTile && <TileDetailModal tile={detailTile} teams={teams} onClose={() => setDetailTile(null)} />}
     </div>
   );
 }

@@ -47,6 +47,25 @@ body {
   border-color: rgb(var(--accent) / 0.65);
 }
 
+/* Glossy metal frame for board tiles — a beveled gradient border plus a
+   soft top-edge highlight to catch the light like brushed chrome. */
+.tile-metal-frame {
+  border-width: 2px;
+  border-style: solid;
+  border-image: linear-gradient(
+    135deg,
+    #d9d2ec 0%,
+    #9a8cc4 18%,
+    #4a3d6b 42%,
+    #2a2244 58%,
+    #8477ad 78%,
+    #d9d2ec 100%
+  ) 1;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.35);
+}
+
 /* Page-to-page fade (see app/components/PageFade.tsx) */
 .page-fade {
   animation: page-fade-in 220ms ease-out;

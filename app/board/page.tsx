@@ -58,6 +58,7 @@ export default async function BoardPage() {
       title: tile.title,
       description: boardTile.description,
       points: tile.tiers.reduce((sum, t) => sum + t.points, 0),
+      tiers: tile.tiers.map((t) => ({ tier: t.tier, points: t.points, requiredCount: t.requiredCount })),
       imageUrl: boardTile.imageUrl,
       teamStatuses: teams.map((team) => {
         const teamSubs = tile.submissions.filter((s) => s.teamId === team.id);

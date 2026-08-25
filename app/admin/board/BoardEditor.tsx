@@ -331,7 +331,7 @@ export default function BoardEditor({ board }: Props) {
 
       <div className="flex gap-6">
         {/* size×size grid */}
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2 shrink-0">
           <p className="text-xs text-purple-500 mb-1">Click a tile to edit it</p>
           <div className={`grid ${GRID_COLS_CLASS[boardSize]} gap-1.5`}>
             {Array.from({ length: boardSize * boardSize }, (_, i) => {
@@ -361,7 +361,7 @@ export default function BoardEditor({ board }: Props) {
         </div>
 
         {/* Tile editor */}
-        <div className="flex-1 bg-[#0e0820] border border-purple-900/40 rounded-xl p-5 overflow-y-auto max-h-[85vh]">
+        <div className="flex-1 min-w-0 bg-[#0e0820] border border-purple-900/40 rounded-xl p-5 overflow-y-auto max-h-[85vh]">
           {selected === null ? (
             <p className="text-purple-600 text-sm">Select a tile on the grid to edit it.</p>
           ) : (
