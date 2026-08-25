@@ -5,6 +5,7 @@ import { SpeedInsights } from "@vercel/speed-insights/next";
 import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import LeadColorAmbience from "@/app/components/LeadColorAmbience";
+import PageFade from "@/app/components/PageFade";
 import { computeStandings, type TierDef } from "@/lib/scoring";
 import "./globals.css";
 
@@ -87,7 +88,7 @@ export default async function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <LeadColorAmbience color={leadColor} />
-        {children}
+        <PageFade>{children}</PageFade>
         <Analytics />
         <SpeedInsights />
       </body>

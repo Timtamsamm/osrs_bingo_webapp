@@ -46,3 +46,17 @@ body {
 .accent-border {
   border-color: rgb(var(--accent) / 0.65);
 }
+
+/* Page-to-page fade (see app/components/PageFade.tsx) */
+.page-fade {
+  animation: page-fade-in 220ms ease-out;
+}
+@keyframes page-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .page-fade {
+    animation: none;
+  }
+}
