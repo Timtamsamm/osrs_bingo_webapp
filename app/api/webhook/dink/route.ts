@@ -55,9 +55,11 @@ export async function POST(req: NextRequest) {
       dinkToken: true,
       startsAt: true,
       endsAt: true,
+      size: true,
       tiles: {
         select: {
           id: true,
+          position: true,
           title: true,
           tiers: true,
         },
@@ -69,6 +71,11 @@ export async function POST(req: NextRequest) {
   if (!board.dinkToken || token !== board.dinkToken) {
     return NextResponse.json({ error: "bad_token" }, { status: 401 });
   }
+
+  // Tiles outside the current grid size are hidden (not deleted, see
+  // lib/scoring.ts) — exclude them so drops can't create submissions on a
+  // tile that no longer scores anything.
+  board.tiles = board.tiles.filter((t) => t.position < board.size * board.size);
 
   const now = new Date();
   if (board.startsAt && board.startsAt > now) return NextResponse.json({ status: "event_closed" });

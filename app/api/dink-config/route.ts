@@ -15,7 +15,8 @@ export async function GET(req: NextRequest) {
     where: { active: true },
     select: {
       dinkToken: true,
-      tiles: { select: { tiers: true } },
+      size: true,
+      tiles: { select: { position: true, tiers: true } },
     },
   });
 
@@ -23,8 +24,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "bad_token" }, { status: 401 });
   }
 
+  // Tiles outside the current grid size are hidden (not deleted) — see
+  // lib/scoring.ts — so exclude them here too, or players would get notified
+  // for items that can no longer score anything.
+  const inRangeTiles = board.tiles.filter((t) => t.position < board.size * board.size);
+
   const itemNames = new Set<string>();
-  for (const tile of board.tiles) {
+  for (const tile of inRangeTiles) {
     const tiers = (tile.tiers as TierDef[]) ?? [];
     for (const tierDef of tiers) {
       for (const item of tierDef.dinkItems) {
