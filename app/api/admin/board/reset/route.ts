@@ -40,9 +40,7 @@ export async function DELETE() {
         title: "",
         description: null,
         imageUrl: null,
-        pointsPerSubmission: 1,
-        points: 1,
-        requiredCount: 1,
+        tiers: [],
       },
     }),
   ]);

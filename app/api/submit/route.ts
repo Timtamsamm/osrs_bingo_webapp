@@ -40,13 +40,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Event has ended" }, { status: 403 });
   }
 
-  const activeCount = await prisma.submission.count({
-    where: { userId: session.user.id, tileId, status: { not: "REJECTED" } },
-  });
-  if (activeCount >= tile.requiredCount) {
-    return NextResponse.json({ error: "Already submitted" }, { status: 409 });
-  }
-
   const { url } = await put(
     `submissions/${session.user.id}/${tileId}-${Date.now()}.jpg`,
     file,
@@ -60,8 +53,7 @@ export async function POST(req: NextRequest) {
       imageUrl: url,
       note: note || null,
       teamMember: teamMember || null,
-      status: tile.autoApprove ? "APPROVED" : "PENDING",
-      reviewedAt: tile.autoApprove ? new Date() : null,
+      status: "PENDING",
     },
   });
 

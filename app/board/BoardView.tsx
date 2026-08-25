@@ -1,48 +1,174 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
 import Image from "next/image";
+
+export type TeamStatus = {
+  teamId: string;
+  completed: boolean;
+  inProgress: boolean;
+  achievedTiers: number[];
+};
 
 export type TileSummary = {
   id: string;
+  position: number;
   title: string;
   description: string | null;
   points: number;
-  pointsPerSubmission: number;
-  requiredCount: number;
   imageUrl: string | null;
-  active: number;
-  approved: number;
-  completed: boolean;
-  inProgress: boolean;
-  awaiting: boolean;
-  onlyRejected: boolean;
+  teamStatuses: TeamStatus[];
+};
+
+export type TeamInfo = {
+  id: string;
+  name: string;
+  color: string;
+  earnedPoints: number;
+  completedTiles: number;
+};
+
+export type LineStatus = {
+  teamId: string;
+  bonusTier: number | null;
+};
+
+export type LineSummary = {
+  index: number;
+  statuses: LineStatus[];
+};
+
+export type BonusConfig = {
+  t1: number;
+  t2: number;
+  t3: number;
 };
 
 type View = "grid" | "list";
 
 interface Props {
   tiles: TileSummary[];
+  teams: TeamInfo[];
+  rowSummaries: LineSummary[];
+  colSummaries: LineSummary[];
+  bonusConfig: BonusConfig;
 }
 
-function tileStyles(tile: TileSummary) {
-  if (tile.completed)    return { border: "border-green-500",      bg: "bg-green-500/15",   text: "text-green-200" };
-  if (tile.inProgress)   return { border: "border-orange-500",     bg: "bg-orange-500/10",  text: "text-orange-200" };
-  if (tile.awaiting)     return { border: "border-green-700",      bg: "bg-green-900/15",   text: "text-gray-200" };
-  if (tile.onlyRejected) return { border: "border-red-700",        bg: "bg-red-900/10",     text: "text-gray-300" };
-  return                        { border: "border-stone-600/80 hover:border-amber-700/60", bg: "bg-stone-900/80", text: "text-gray-300" };
+function tileGlowClass(tile: TileSummary) {
+  const anyComplete = tile.teamStatuses.some((s) => s.completed);
+  const anyProgress = tile.teamStatuses.some((s) => s.inProgress);
+  if (anyComplete) return "tile-glow-complete border-green-500/70";
+  if (anyProgress) return "tile-glow-progress accent-border";
+  return "border-purple-900/40 hover:border-purple-700/50";
 }
 
-function StatusBadge({ tile }: { tile: TileSummary }) {
-  if (tile.completed)    return <span className="text-xs font-semibold text-green-400">Completed</span>;
-  if (tile.inProgress)   return <span className="text-xs font-semibold text-orange-400">{tile.active}/{tile.requiredCount} submitted</span>;
-  if (tile.awaiting)     return <span className="text-xs font-semibold text-amber-400">Awaiting review</span>;
-  if (tile.onlyRejected) return <span className="text-xs font-semibold text-red-400">Rejected</span>;
-  return <span className="text-xs text-stone-500">Not started</span>;
+function contrastColor(hex: string): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.55 ? "#000" : "#fff";
 }
 
-export default function BoardView({ tiles }: Props) {
+function TeamDots({ tile, teams }: { tile: TileSummary; teams: TeamInfo[] }) {
+  return (
+    <div className="flex gap-1 flex-wrap">
+      {teams.map((team) => {
+        const status = tile.teamStatuses.find((s) => s.teamId === team.id);
+        const completed = status?.completed ?? false;
+        const inProgress = status?.inProgress ?? false;
+        const tiers = status?.achievedTiers ?? [];
+        const label = completed ? "T1 complete" : tiers.length > 0 ? `T${[...tiers].sort().join(", T")} achieved` : "not started";
+        return (
+          <span
+            key={team.id}
+            title={`${team.name}: ${label}`}
+            className="w-2 h-2 rounded-full flex-shrink-0 border"
+            style={{
+              background: completed ? team.color : inProgress ? `${team.color}50` : "transparent",
+              borderColor: completed || inProgress ? team.color : "#3b2060",
+              boxShadow: completed ? `0 0 4px ${team.color}90` : undefined,
+            }}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+function CompletionBadge({ tile, teams }: { tile: TileSummary; teams: TeamInfo[] }) {
+  const completedTeams = tile.teamStatuses
+    .filter((s) => s.completed)
+    .map((s) => teams.find((t) => t.id === s.teamId))
+    .filter(Boolean) as TeamInfo[];
+  if (completedTeams.length === 0) return null;
+  return (
+    <div className="flex gap-0.5">
+      {completedTeams.map((team) => (
+        <span
+          key={team.id}
+          className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-bold"
+          style={{ background: team.color, boxShadow: `0 0 5px ${team.color}` }}
+          title={`${team.name} completed`}
+        >
+          ✓
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function LineIndicator({
+  summary,
+  teams,
+  bonusConfig,
+  direction,
+}: {
+  summary: LineSummary;
+  teams: TeamInfo[];
+  bonusConfig: BonusConfig;
+  direction: "row" | "col";
+}) {
+  const achieved = summary.statuses.filter((s) => s.bonusTier !== null);
+
+  const inner =
+    achieved.length === 0 ? (
+      <span className="text-[9px] text-purple-900/30 select-none leading-none">—</span>
+    ) : (
+      achieved.map((s) => {
+        const team = teams.find((t) => t.id === s.teamId)!;
+        const pts = s.bonusTier === 1 ? bonusConfig.t1 : s.bonusTier === 2 ? bonusConfig.t2 : bonusConfig.t3;
+        return (
+          <span
+            key={s.teamId}
+            className="text-[9px] font-bold rounded px-1 py-0.5 leading-none"
+            style={{
+              background: team.color,
+              color: contrastColor(team.color),
+              boxShadow: `0 0 5px ${team.color}60`,
+            }}
+            title={`${team.name}: ${direction} complete — T${s.bonusTier} (+${pts} pts)`}
+          >
+            T{s.bonusTier}
+          </span>
+        );
+      })
+    );
+
+  if (direction === "row") {
+    return (
+      <div className="flex flex-col items-center justify-center gap-1 shrink-0" style={{ width: "2rem" }}>
+        {inner}
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-row items-center justify-center gap-1 flex-wrap pt-1">
+      {inner}
+    </div>
+  );
+}
+
+export default function BoardView({ tiles, teams, rowSummaries, colSummaries, bonusConfig }: Props) {
   const [view, setView] = useState<View>("grid");
 
   useEffect(() => {
@@ -55,18 +181,22 @@ export default function BoardView({ tiles }: Props) {
     localStorage.setItem("boardView", v);
   }
 
+  const hasLineBonuses = bonusConfig.t1 > 0 || bonusConfig.t2 > 0 || bonusConfig.t3 > 0;
+
+  // Position map for grid rendering
+  const tileByPos = new Map(tiles.map((t) => [t.position, t]));
+
   return (
     <div>
-      {/* Toggle */}
+      {/* View toggle */}
       <div className="flex justify-end mb-3">
-        <div className="flex rounded-lg border border-stone-700/60 overflow-hidden">
+        <div className="flex rounded-lg border border-purple-900/50 overflow-hidden">
           <button
             type="button"
             onClick={() => switchView("grid")}
             title="Grid view"
-            className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-              view === "grid" ? "bg-stone-700 text-white" : "bg-stone-900/80 text-stone-400 hover:text-white"
-            }`}
+            className={`px-3 py-1.5 text-xs font-medium transition-colors ${view === "grid" ? "text-white" : "bg-transparent text-purple-600 hover:text-purple-300"}`}
+            style={view === "grid" ? { backgroundColor: "rgb(var(--accent) / 0.25)", color: "rgb(var(--accent))" } : undefined}
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
               <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
@@ -77,9 +207,8 @@ export default function BoardView({ tiles }: Props) {
             type="button"
             onClick={() => switchView("list")}
             title="List view"
-            className={`px-3 py-1.5 text-xs font-medium transition-colors border-l border-stone-700/60 ${
-              view === "list" ? "bg-stone-700 text-white" : "bg-stone-900/80 text-stone-400 hover:text-white"
-            }`}
+            className={`px-3 py-1.5 text-xs font-medium transition-colors border-l border-purple-900/50 ${view === "list" ? "text-white" : "bg-transparent text-purple-600 hover:text-purple-300"}`}
+            style={view === "list" ? { backgroundColor: "rgb(var(--accent) / 0.25)", color: "rgb(var(--accent))" } : undefined}
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
               <rect x="3" y="5" width="18" height="2" rx="1"/><rect x="3" y="11" width="18" height="2" rx="1"/><rect x="3" y="17" width="18" height="2" rx="1"/>
@@ -90,34 +219,86 @@ export default function BoardView({ tiles }: Props) {
 
       {/* Grid view */}
       {view === "grid" && (
-        <div className="grid grid-cols-5 gap-2">
-          {tiles.map((tile) => {
-            const { border, bg, text } = tileStyles(tile);
-            return (
-              <Link
-                key={tile.id}
-                href={`/submit?tileId=${tile.id}`}
-                className={`relative aspect-square rounded-xl border-2 text-xs font-medium transition-all hover:scale-[1.03] overflow-hidden ${border} ${bg}`}
-              >
-                {tile.imageUrl && (
-                  <Image src={tile.imageUrl} alt={tile.title} fill sizes="160px" className="object-cover" />
-                )}
-                {tile.imageUrl && <div className={`absolute inset-0 ${bg} opacity-50`} />}
-
-                <div className="absolute top-1.5 right-1.5 z-10">
-                  {tile.completed    && <span className="text-green-400 text-sm leading-none">✓</span>}
-                  {tile.inProgress   && <span className="text-orange-400 text-xs font-bold leading-none">{tile.active}/{tile.requiredCount}</span>}
-                  {tile.awaiting     && <span className="block w-2 h-2 rounded-full bg-green-500" />}
-                  {tile.onlyRejected && <span className="text-red-400 text-sm leading-none">✕</span>}
+        <div
+          className="grid gap-3"
+          style={{ gridTemplateColumns: hasLineBonuses ? "repeat(5, 1fr) 2rem" : "repeat(5, 1fr)" }}
+        >
+          {/* 5 rows of tiles */}
+          {[0, 1, 2, 3, 4].flatMap((rowIdx) => {
+            const tileCells = [0, 1, 2, 3, 4].map((colIdx) => {
+              const pos = rowIdx * 5 + colIdx;
+              const tile = tileByPos.get(pos);
+              if (!tile) {
+                return (
+                  <div
+                    key={`empty-${pos}`}
+                    className="rounded-xl border border-purple-900/20 bg-surface/20"
+                    style={{ aspectRatio: "1/1" }}
+                  />
+                );
+              }
+              const glow = tileGlowClass(tile);
+              return (
+                <div
+                  key={tile.id}
+                  className={`relative rounded-xl border bg-surface/80 overflow-hidden flex flex-col transition-all duration-200 ${glow}`}
+                  style={{ aspectRatio: "1/1" }}
+                >
+                  {tile.imageUrl && (
+                    <>
+                      <Image src={tile.imageUrl} alt={tile.title} fill sizes="200px" className="object-cover opacity-70" />
+                      <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/10 to-black/60" />
+                    </>
+                  )}
+                  <div className="relative z-10 flex flex-col h-full p-2">
+                    <div className="flex items-start justify-between gap-1 flex-1">
+                      <p className="text-xs font-semibold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] leading-tight line-clamp-3">
+                        {tile.title}
+                      </p>
+                      <div className="shrink-0 mt-0.5">
+                        <CompletionBadge tile={tile} teams={teams} />
+                      </div>
+                    </div>
+                    <div className="flex items-end justify-between gap-1 mt-1">
+                      <TeamDots tile={tile} teams={teams} />
+                      <span className="text-[10px] text-purple-300/70 tabular-nums shrink-0">
+                        {+tile.points.toFixed(1)}pt
+                      </span>
+                    </div>
+                  </div>
                 </div>
+              );
+            });
 
-                <div className="absolute bottom-0 left-0 right-0 z-10 px-1.5 pt-4 pb-1.5 text-center bg-gradient-to-t from-black/80 to-transparent">
-                  <p className={`line-clamp-2 leading-tight ${text}`}>{tile.title}</p>
-                  <p className="text-gray-400 text-xs mt-0.5">{+tile.points.toFixed(1)}pt</p>
-                </div>
-              </Link>
-            );
+            if (!hasLineBonuses) return tileCells;
+
+            return [
+              ...tileCells,
+              <LineIndicator
+                key={`row-ind-${rowIdx}`}
+                summary={rowSummaries[rowIdx]}
+                teams={teams}
+                bonusConfig={bonusConfig}
+                direction="row"
+              />,
+            ];
           })}
+
+          {/* Column indicators */}
+          {hasLineBonuses && (
+            <>
+              {[0, 1, 2, 3, 4].map((colIdx) => (
+                <LineIndicator
+                  key={`col-ind-${colIdx}`}
+                  summary={colSummaries[colIdx]}
+                  teams={teams}
+                  bonusConfig={bonusConfig}
+                  direction="col"
+                />
+              ))}
+              <div key="corner" />
+            </>
+          )}
         </div>
       )}
 
@@ -125,42 +306,48 @@ export default function BoardView({ tiles }: Props) {
       {view === "list" && (
         <div className="flex flex-col gap-1.5">
           {tiles.map((tile) => {
-            const { border, bg } = tileStyles(tile);
+            const glow = tileGlowClass(tile);
             return (
-              <Link
-                key={tile.id}
-                href={`/submit?tileId=${tile.id}`}
-                className={`flex items-center gap-3 rounded-xl border-2 px-4 py-3 transition-all hover:brightness-110 ${border} ${bg}`}
-              >
+              <div key={tile.id} className={`flex items-center gap-3 rounded-xl border bg-surface/80 px-4 py-3 transition-all ${glow}`}>
                 {tile.imageUrl && (
                   <div className="relative w-10 h-10 rounded-lg overflow-hidden shrink-0">
                     <Image src={tile.imageUrl} alt={tile.title} fill sizes="40px" className="object-cover" />
                   </div>
                 )}
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white truncate">{tile.title}</p>
+                  <p className="text-sm font-semibold text-purple-100 truncate">{tile.title}</p>
                   {tile.description && (
-                    <p className="text-xs text-stone-400 truncate mt-0.5">{tile.description}</p>
+                    <p className="text-xs text-purple-500/70 truncate mt-0.5">{tile.description}</p>
                   )}
                 </div>
-                <div className="flex items-center gap-4 shrink-0">
-                  <StatusBadge tile={tile} />
-                  <span className="text-xs text-stone-400 tabular-nums w-12 text-right">{+tile.points.toFixed(1)} pts</span>
+                <div className="flex items-center gap-3 shrink-0">
+                  <TeamDots tile={tile} teams={teams} />
+                  <CompletionBadge tile={tile} teams={teams} />
+                  <span className="text-xs text-purple-500/60 tabular-nums w-10 text-right">
+                    {+tile.points.toFixed(1)} pts
+                  </span>
                 </div>
-              </Link>
+              </div>
             );
           })}
         </div>
       )}
 
       {/* Legend */}
-      <div className="flex flex-wrap gap-4 mt-6 text-xs text-gray-500">
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded border-2 border-green-500 bg-green-500/15" />Completed</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded border-2 border-orange-500 bg-orange-500/10" />In progress</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded border-2 border-green-700 bg-green-900/15" />Awaiting review</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded border-2 border-red-700 bg-red-900/10" />Rejected</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded border-2 border-stone-600/80 bg-stone-900/80" />Not started</span>
-      </div>
+      {teams.length > 0 && (
+        <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-6 text-xs text-purple-600/70">
+          {teams.map((team) => (
+            <span key={team.id} className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full" style={{ background: team.color, boxShadow: `0 0 4px ${team.color}` }} />
+              {team.name}
+            </span>
+          ))}
+          <span className="text-purple-800 ml-2">
+            · filled = T1 complete · half = lower tier done · outline = not started
+            {hasLineBonuses && " · tier badge = row/col bonus"}
+          </span>
+        </div>
+      )}
     </div>
   );
 }

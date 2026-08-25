@@ -5,15 +5,20 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import TileImageCropper from "./TileImageCropper";
 
+export interface TierDef {
+  tier: 1 | 2 | 3;
+  points: number;
+  requiredCount: number;
+  dinkItems: Array<{ id: number; name: string }>;
+}
+
 interface Tile {
   id: string;
   position: number;
   title: string;
   description: string | null;
-  pointsPerSubmission: number;
-  requiredCount: number;
   imageUrl: string | null;
-  dinkItems: Array<{ id: number; name: string }> | null;
+  tiers: TierDef[] | null;
 }
 
 interface Board {
@@ -23,8 +28,8 @@ interface Board {
   startsAt: Date | null;
   endsAt: Date | null;
   maxTeamSize: number;
-  passcode: string | null;
   dinkToken: string | null;
+  rowColBonuses: { t1: number; t2: number; t3: number } | null;
   tiles: Tile[];
 }
 
@@ -53,11 +58,56 @@ function toDatetimeLocal(date: Date | null): string {
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 }
 
+interface TierState {
+  points: number;
+  requiredCount: number;
+  dinkItemsText: string;
+}
+
+interface TileState {
+  title: string;
+  description: string;
+  imageUrl: string | null;
+  t1: TierState;
+  t2: TierState;
+  t3: TierState;
+}
+
+const EMPTY_TIER: TierState = { points: 1, requiredCount: 1, dinkItemsText: "" };
+
+function makeTileState(t: Tile | undefined): TileState {
+  if (!t) return { title: "", description: "", imageUrl: null, t1: { ...EMPTY_TIER }, t2: { ...EMPTY_TIER }, t3: { ...EMPTY_TIER } };
+  const tiers = t.tiers ?? [];
+  const getTier = (n: 1 | 2 | 3): TierState => {
+    const td = tiers.find((d) => d.tier === n);
+    return td ? { points: td.points, requiredCount: td.requiredCount, dinkItemsText: dinkItemsToText(td.dinkItems) } : { ...EMPTY_TIER };
+  };
+  return { title: t.title, description: t.description ?? "", imageUrl: t.imageUrl ?? null, t1: getTier(1), t2: getTier(2), t3: getTier(3) };
+}
+
+function stateToTiers(t: TileState): TierDef[] {
+  const result: TierDef[] = [];
+  for (const [tierNum, ts] of [[3, t.t3], [2, t.t2], [1, t.t1]] as [1 | 2 | 3, TierState][]) {
+    const items = parseDinkItems(ts.dinkItemsText);
+    if (items.length > 0) {
+      result.push({ tier: tierNum, points: ts.points, requiredCount: ts.requiredCount, dinkItems: items });
+    }
+  }
+  return result;
+}
+
 interface Props {
   board: Board | null;
 }
 
-const EMPTY_TILE = { title: "", description: "", pointsPerSubmission: 1, requiredCount: 1, imageUrl: null as string | null, dinkItemsText: "" };
+const inputCls = "bg-[#130a28] border border-purple-900/50 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/40 focus:border-purple-600/60 placeholder-purple-800";
+const labelCls = "text-xs text-purple-400 font-medium";
+
+const TIER_META: Record<"t1" | "t2" | "t3", { num: 1 | 2 | 3; label: string; hint: string }> = {
+  t3: { num: 3, label: "T3 — Easiest", hint: "Fewest/simplest drops" },
+  t2: { num: 2, label: "T2 — Medium", hint: "" },
+  t1: { num: 1, label: "T1 — Hardest", hint: "Most valuable drops" },
+};
 
 export default function BoardEditor({ board }: Props) {
   const router = useRouter();
@@ -69,8 +119,10 @@ export default function BoardEditor({ board }: Props) {
   const [boardStartsAt, setBoardStartsAt] = useState(toDatetimeLocal(board?.startsAt ?? null));
   const [boardEndsAt, setBoardEndsAt] = useState(toDatetimeLocal(board?.endsAt ?? null));
   const [boardMaxTeamSize, setBoardMaxTeamSize] = useState(board?.maxTeamSize ?? 10);
-  const [boardPasscode, setBoardPasscode] = useState(board?.passcode ?? "");
   const [boardDinkToken, setBoardDinkToken] = useState(board?.dinkToken ?? "");
+  const [bonusT1, setBonusT1] = useState(board?.rowColBonuses?.t1 ?? 0);
+  const [bonusT2, setBonusT2] = useState(board?.rowColBonuses?.t2 ?? 0);
+  const [bonusT3, setBonusT3] = useState(board?.rowColBonuses?.t3 ?? 0);
 
   const generateDinkToken = useCallback(() => {
     const token = Array.from(crypto.getRandomValues(new Uint8Array(18)))
@@ -79,20 +131,10 @@ export default function BoardEditor({ board }: Props) {
     setBoardDinkToken(token);
   }, []);
 
-  const [tiles, setTiles] = useState<Record<number, typeof EMPTY_TILE>>(() => {
-    const map: Record<number, typeof EMPTY_TILE> = {};
+  const [tiles, setTiles] = useState<Record<number, TileState>>(() => {
+    const map: Record<number, TileState> = {};
     for (let i = 0; i < 25; i++) {
-      const t = board?.tiles.find((t) => t.position === i);
-      map[i] = t
-        ? {
-            title: t.title,
-            description: t.description ?? "",
-            pointsPerSubmission: t.pointsPerSubmission ?? 1,
-            requiredCount: t.requiredCount,
-            imageUrl: t.imageUrl ?? null,
-            dinkItemsText: dinkItemsToText(t.dinkItems ?? []),
-          }
-        : { ...EMPTY_TILE };
+      map[i] = makeTileState(board?.tiles.find((t) => t.position === i));
     }
     return map;
   });
@@ -101,13 +143,19 @@ export default function BoardEditor({ board }: Props) {
   const [imageUploading, setImageUploading] = useState(false);
   const [cropSrc, setCropSrc] = useState<{ pos: number; src: string } | null>(null);
 
-  function updateTile(pos: number, field: string, value: string | number | boolean | null) {
+  function updateTile(pos: number, field: "title" | "description", value: string) {
     setTiles((prev) => ({ ...prev, [pos]: { ...prev[pos], [field]: value } }));
   }
 
+  function updateTier(pos: number, tierKey: "t1" | "t2" | "t3", field: keyof TierState, value: string | number) {
+    setTiles((prev) => ({
+      ...prev,
+      [pos]: { ...prev[pos], [tierKey]: { ...prev[pos][tierKey], [field]: value } },
+    }));
+  }
+
   function onFileSelected(pos: number, file: File) {
-    const src = URL.createObjectURL(file);
-    setCropSrc({ pos, src });
+    setCropSrc({ pos, src: URL.createObjectURL(file) });
   }
 
   async function onCropDone(blob: Blob) {
@@ -123,7 +171,7 @@ export default function BoardEditor({ board }: Props) {
     const res = await fetch("/api/admin/tiles/image", { method: "POST", body: form });
     if (res.ok) {
       const { url } = await res.json();
-      updateTile(pos, "imageUrl", url);
+      setTiles((prev) => ({ ...prev, [pos]: { ...prev[pos], imageUrl: url } }));
     }
     setImageUploading(false);
   }
@@ -140,7 +188,7 @@ export default function BoardEditor({ board }: Props) {
       const tilesPayload = Object.fromEntries(
         Object.entries(tiles).map(([pos, t]) => [
           pos,
-          { ...t, dinkItems: parseDinkItems(t.dinkItemsText) },
+          { title: t.title, description: t.description, imageUrl: t.imageUrl, tiers: stateToTiers(t) },
         ])
       );
       const res = await fetch("/api/admin/board", {
@@ -153,8 +201,8 @@ export default function BoardEditor({ board }: Props) {
           startsAt: boardStartsAt ? new Date(boardStartsAt).toISOString() : null,
           endsAt: boardEndsAt ? new Date(boardEndsAt).toISOString() : null,
           maxTeamSize: boardMaxTeamSize,
-          passcode: boardPasscode,
           dinkToken: boardDinkToken,
+          rowColBonuses: { t1: bonusT1, t2: bonusT2, t3: bonusT3 },
           tiles: tilesPayload,
         }),
       });
@@ -172,114 +220,86 @@ export default function BoardEditor({ board }: Props) {
   return (
     <div className="flex flex-col gap-8">
       {/* Board meta */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 flex flex-col gap-4">
-        <h2 className="font-semibold text-gray-200">Board Details</h2>
+      <div className="bg-[#0e0820] border border-purple-900/40 rounded-xl p-6 flex flex-col gap-4">
+        <h2 className="font-semibold text-purple-100">Board Details</h2>
         <div className="flex gap-4">
-          <div className="flex-1 flex flex-col gap-1">
-            <label className="text-xs text-gray-400">Name</label>
-            <input
-              value={boardName}
-              onChange={(e) => setBoardName(e.target.value)}
-              placeholder="e.g. Summer Bingo 2025"
-              className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
-            />
+          <div className="flex-1 flex flex-col gap-1.5">
+            <label className={labelCls}>Name</label>
+            <input value={boardName} onChange={(e) => setBoardName(e.target.value)} placeholder="e.g. Summer Bingo 2025" className={inputCls} />
           </div>
-          <div className="flex-1 flex flex-col gap-1">
-            <label className="text-xs text-gray-400">Description (optional)</label>
-            <input
-              value={boardDesc}
-              onChange={(e) => setBoardDesc(e.target.value)}
-              placeholder="A short description"
-              className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
-            />
+          <div className="flex-1 flex flex-col gap-1.5">
+            <label className={labelCls}>Description (optional)</label>
+            <input value={boardDesc} onChange={(e) => setBoardDesc(e.target.value)} placeholder="A short description" className={inputCls} />
           </div>
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-xs text-gray-400">Event passcode (optional)</label>
-          <div className="flex gap-2 items-center">
-            <input
-              value={boardPasscode}
-              onChange={(e) => setBoardPasscode(e.target.value)}
-              placeholder="Leave blank to disable the passcode gate"
-              className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono"
-            />
-            {boardPasscode && (
-              <button type="button" onClick={() => setBoardPasscode("")} className="text-xs text-gray-500 hover:text-red-400 transition-colors shrink-0">
-                Clear
-              </button>
-            )}
-          </div>
-          <p className="text-xs text-gray-600">Players must enter this once after login. Changing it invalidates all existing verifications.</p>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label className="text-xs text-gray-400">Dink webhook token (optional)</label>
+        <div className="flex flex-col gap-1.5">
+          <label className={labelCls}>Dink webhook token (optional)</label>
           <div className="flex gap-2 items-center">
             <input
               value={boardDinkToken}
               onChange={(e) => setBoardDinkToken(e.target.value)}
               placeholder="Leave blank to disable Dink integration"
-              className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono"
+              className={`${inputCls} flex-1 font-mono`}
             />
-            <button type="button" onClick={generateDinkToken} className="text-xs bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-lg px-3 py-2 transition-colors shrink-0">
+            <button type="button" onClick={generateDinkToken} className="text-xs bg-purple-900/50 hover:bg-purple-800/60 border border-purple-700/40 text-purple-300 rounded-lg px-3 py-2 transition-colors shrink-0">
               Generate
             </button>
             {boardDinkToken && (
-              <button type="button" onClick={() => setBoardDinkToken("")} className="text-xs text-gray-500 hover:text-red-400 transition-colors shrink-0">
+              <button type="button" onClick={() => setBoardDinkToken("")} className="text-xs text-purple-600 hover:text-red-400 transition-colors shrink-0">
                 Clear
               </button>
             )}
           </div>
           {boardDinkToken && (
-            <p className="text-xs text-gray-500 font-mono break-all mt-1">
-              Webhook URL: <span className="text-amber-400/80 select-all">/api/webhook/dink?token={boardDinkToken}</span>
+            <p className="text-xs text-purple-600 font-mono break-all mt-1">
+              Webhook URL: <span className="text-purple-400/80 select-all">/api/webhook/dink?token={boardDinkToken}</span>
             </p>
           )}
-          <p className="text-xs text-gray-600">Players paste this URL into Dink → Webhook URLs. Drops matching tile item IDs auto-approve.</p>
+          <p className="text-xs text-purple-700/60">Players paste this URL into Dink → Webhook URLs. Drops matching tile item IDs auto-approve.</p>
+        </div>
+
+        {/* Row / Column completion bonus */}
+        <div className="flex flex-col gap-2 border-t border-purple-900/30 pt-4">
+          <div>
+            <label className={labelCls}>Row &amp; Column Completion Bonus</label>
+            <p className="text-[11px] text-purple-700/60 mt-0.5">
+              Awarded when a team completes every tile in a row or column. Bonus tier = lowest-value tier achieved across the line.
+            </p>
+          </div>
+          <div className="flex gap-4">
+            <div className="flex flex-col gap-1.5 flex-1">
+              <label className={labelCls}>T1 bonus pts (hardest)</label>
+              <input type="number" min={0} step={0.5} value={bonusT1} onChange={(e) => setBonusT1(Number(e.target.value))} className={inputCls} />
+            </div>
+            <div className="flex flex-col gap-1.5 flex-1">
+              <label className={labelCls}>T2 bonus pts</label>
+              <input type="number" min={0} step={0.5} value={bonusT2} onChange={(e) => setBonusT2(Number(e.target.value))} className={inputCls} />
+            </div>
+            <div className="flex flex-col gap-1.5 flex-1">
+              <label className={labelCls}>T3 bonus pts (easiest)</label>
+              <input type="number" min={0} step={0.5} value={bonusT3} onChange={(e) => setBonusT3(Number(e.target.value))} className={inputCls} />
+            </div>
+          </div>
         </div>
 
         <div className="flex gap-4 items-start">
-          <div className="flex flex-col gap-1 w-32 shrink-0">
-            <label className="text-xs text-gray-400">Max team size</label>
-            <input
-              type="number"
-              min={1}
-              max={20}
-              value={boardMaxTeamSize}
-              onChange={(e) => setBoardMaxTeamSize(Number(e.target.value))}
-              className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
-            />
+          <div className="flex flex-col gap-1.5 w-32 shrink-0">
+            <label className={labelCls}>Max team size</label>
+            <input type="number" min={1} max={20} value={boardMaxTeamSize} onChange={(e) => setBoardMaxTeamSize(Number(e.target.value))} className={inputCls} />
           </div>
-          <div className="flex flex-col gap-1 flex-1">
-            <label className="text-xs text-gray-400">Event start date &amp; time (optional)</label>
+          <div className="flex flex-col gap-1.5 flex-1">
+            <label className={labelCls}>Event start (optional)</label>
             <div className="flex gap-2">
-              <input
-                type="datetime-local"
-                value={boardStartsAt}
-                onChange={(e) => setBoardStartsAt(e.target.value)}
-                className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 [color-scheme:dark]"
-              />
-              {boardStartsAt && (
-                <button type="button" onClick={() => setBoardStartsAt("")} className="text-xs text-gray-500 hover:text-red-400 transition-colors">
-                  Clear
-                </button>
-              )}
+              <input type="datetime-local" value={boardStartsAt} onChange={(e) => setBoardStartsAt(e.target.value)} className={`${inputCls} flex-1 [color-scheme:dark]`} />
+              {boardStartsAt && <button type="button" onClick={() => setBoardStartsAt("")} className="text-xs text-purple-600 hover:text-red-400 transition-colors">Clear</button>}
             </div>
           </div>
-          <div className="flex flex-col gap-1 flex-1">
-            <label className="text-xs text-gray-400">Event end date &amp; time (optional)</label>
+          <div className="flex flex-col gap-1.5 flex-1">
+            <label className={labelCls}>Event end (optional)</label>
             <div className="flex gap-2">
-              <input
-                type="datetime-local"
-                value={boardEndsAt}
-                onChange={(e) => setBoardEndsAt(e.target.value)}
-                className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 [color-scheme:dark]"
-              />
-              {boardEndsAt && (
-                <button type="button" onClick={() => setBoardEndsAt("")} className="text-xs text-gray-500 hover:text-red-400 transition-colors">
-                  Clear
-                </button>
-              )}
+              <input type="datetime-local" value={boardEndsAt} onChange={(e) => setBoardEndsAt(e.target.value)} className={`${inputCls} flex-1 [color-scheme:dark]`} />
+              {boardEndsAt && <button type="button" onClick={() => setBoardEndsAt("")} className="text-xs text-purple-600 hover:text-red-400 transition-colors">Clear</button>}
             </div>
           </div>
         </div>
@@ -288,25 +308,28 @@ export default function BoardEditor({ board }: Props) {
       <div className="flex gap-6">
         {/* 5×5 grid */}
         <div className="flex flex-col gap-2">
-          <p className="text-xs text-gray-400 mb-1">Click a tile to edit it</p>
+          <p className="text-xs text-purple-500 mb-1">Click a tile to edit it</p>
           <div className="grid grid-cols-5 gap-1.5">
             {Array.from({ length: 25 }, (_, i) => {
               const t = tiles[i];
               const filled = t.title.trim().length > 0;
+              const hasTiers = filled && stateToTiers(t).length > 0;
               return (
                 <button
                   key={i}
                   onClick={() => setSelected(i === selected ? null : i)}
-                  className={`
-                    w-16 h-16 rounded-lg border text-xs font-medium flex flex-col items-center justify-center p-1 text-center transition-all
-                    ${selected === i ? "border-amber-500 bg-amber-500/10 text-amber-300" :
-                      filled ? "border-gray-600 bg-gray-800 text-gray-200" :
-                      "border-dashed border-gray-700 bg-gray-900 text-gray-600"}
-                  `}
+                  className={`w-16 h-16 rounded-lg border text-xs font-medium flex flex-col items-center justify-center p-1 text-center transition-all ${
+                    selected === i
+                      ? "border-purple-400 bg-purple-400/10 text-purple-200"
+                      : filled
+                      ? "border-purple-700/50 bg-[#130a28] text-purple-200"
+                      : "border-dashed border-purple-900/50 bg-[#0e0820] text-purple-700"
+                  }`}
                 >
-                  <span className="line-clamp-2 leading-tight">
-                    {filled ? t.title : i + 1}
-                  </span>
+                  <span className="line-clamp-2 leading-tight">{filled ? t.title : i + 1}</span>
+                  {hasTiers && (
+                    <span className="text-[8px] text-purple-500 mt-0.5">{stateToTiers(t).map(td => `T${td.tier}`).join(" ")}</span>
+                  )}
                 </button>
               );
             })}
@@ -314,102 +337,105 @@ export default function BoardEditor({ board }: Props) {
         </div>
 
         {/* Tile editor */}
-        <div className="flex-1 bg-gray-900 border border-gray-800 rounded-xl p-5">
+        <div className="flex-1 bg-[#0e0820] border border-purple-900/40 rounded-xl p-5 overflow-y-auto max-h-[85vh]">
           {selected === null ? (
-            <p className="text-gray-500 text-sm">Select a tile on the grid to edit it.</p>
+            <p className="text-purple-600 text-sm">Select a tile on the grid to edit it.</p>
           ) : (
             <div className="flex flex-col gap-4">
-              <h3 className="font-semibold text-gray-200">Tile {selected + 1}</h3>
+              <h3 className="font-semibold text-purple-100">Tile {selected + 1}</h3>
 
-              <div className="flex flex-col gap-1">
-                <label className="text-xs text-gray-400">Title</label>
-                <input
-                  value={selectedTile!.title}
-                  onChange={(e) => updateTile(selected, "title", e.target.value)}
-                  placeholder="e.g. Kill Zulrah"
-                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
-                />
+              <div className="flex flex-col gap-1.5">
+                <label className={labelCls}>Title</label>
+                <input value={selectedTile!.title} onChange={(e) => updateTile(selected, "title", e.target.value)} placeholder="e.g. Araxxor" className={inputCls} />
               </div>
 
-              <div className="flex flex-col gap-1">
-                <label className="text-xs text-gray-400">Description (optional)</label>
-                <textarea
-                  value={selectedTile!.description}
-                  onChange={(e) => updateTile(selected, "description", e.target.value)}
-                  rows={2}
-                  placeholder="Any extra instructions for the player"
-                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none"
-                />
+              <div className="flex flex-col gap-1.5">
+                <label className={labelCls}>Description (optional)</label>
+                <textarea value={selectedTile!.description} onChange={(e) => updateTile(selected, "description", e.target.value)} rows={2} placeholder="Any extra instructions" className={`${inputCls} resize-none`} />
               </div>
 
-              <div className="flex gap-4">
-                <div className="flex flex-col gap-1 flex-1">
-                  <label className="text-xs text-gray-400">Required submissions</label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={selectedTile!.requiredCount}
-                    onChange={(e) => updateTile(selected, "requiredCount", Number(e.target.value))}
-                    className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  />
-                </div>
-                <div className="flex flex-col gap-1 flex-1">
-                  <label className="text-xs text-gray-400">Points per submission</label>
-                  <input
-                    type="number"
-                    min={0.5}
-                    step={0.5}
-                    value={selectedTile!.pointsPerSubmission ?? 1}
-                    onChange={(e) => updateTile(selected, "pointsPerSubmission", Number(e.target.value))}
-                    className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  />
-                </div>
-              </div>
-              <p className="text-xs text-gray-500">
-                Total points:{" "}
-                <span className="text-amber-400 font-medium">
-                  {+((selectedTile!.requiredCount || 1) * (selectedTile!.pointsPerSubmission || 1)).toFixed(2)}
-                </span>
-              </p>
-
-              <div className="flex flex-col gap-1">
-                <label className="text-xs text-gray-400">Dink item IDs (optional)</label>
-                <textarea
-                  value={selectedTile!.dinkItemsText}
-                  onChange={(e) => updateTile(selected, "dinkItemsText", e.target.value)}
-                  rows={3}
-                  placeholder={"4151 Abyssal whip\n12073 Twisted bow"}
-                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none"
-                />
-                <p className="text-xs text-gray-600">One item per line: <span className="font-mono text-gray-500">itemId item name</span>. Dink auto-claims when a player loots a matching item.</p>
-              </div>
-
+              {/* Tier sections */}
               <div className="flex flex-col gap-2">
-                <label className="text-xs text-gray-400">Tile image (optional)</label>
+                <p className={`${labelCls} mb-1`}>Tiers — add Dink items to activate a tier</p>
+                {(["t3", "t2", "t1"] as const).map((tierKey) => {
+                  const meta = TIER_META[tierKey];
+                  const ts = selectedTile![tierKey];
+                  const hasItems = ts.dinkItemsText.trim().length > 0;
+                  return (
+                    <div
+                      key={tierKey}
+                      className={`border rounded-lg p-3 flex flex-col gap-2.5 transition-colors ${
+                        hasItems ? "border-purple-700/50 bg-[#130a28]/60" : "border-purple-900/30 bg-transparent"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className={`text-xs font-bold ${hasItems ? "text-purple-200" : "text-purple-700"}`}>
+                          {meta.label}
+                        </span>
+                        {meta.hint && (
+                          <span className="text-[10px] text-purple-700/70">{meta.hint}</span>
+                        )}
+                        {hasItems && (
+                          <span className="ml-auto text-[10px] text-purple-400">
+                            {ts.requiredCount}× · {+ts.points.toFixed(1)} pts
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex gap-3">
+                        <div className="flex flex-col gap-1 w-24 shrink-0">
+                          <label className={labelCls}>Points</label>
+                          <input
+                            type="number"
+                            min={0}
+                            step={0.5}
+                            value={ts.points}
+                            onChange={(e) => updateTier(selected, tierKey, "points", Number(e.target.value))}
+                            className={inputCls}
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1 w-24 shrink-0">
+                          <label className={labelCls}>Required</label>
+                          <input
+                            type="number"
+                            min={1}
+                            value={ts.requiredCount}
+                            onChange={(e) => updateTier(selected, tierKey, "requiredCount", Number(e.target.value))}
+                            className={inputCls}
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1 flex-1">
+                          <label className={labelCls}>Dink item IDs</label>
+                          <textarea
+                            value={ts.dinkItemsText}
+                            onChange={(e) => updateTier(selected, tierKey, "dinkItemsText", e.target.value)}
+                            rows={2}
+                            placeholder={"4151 Abyssal whip\n12073 Twisted bow"}
+                            className={`${inputCls} font-mono resize-none text-xs`}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                <p className="text-[10px] text-purple-700/60">Item IDs: one per line as <span className="font-mono text-purple-600">itemId item name</span>. Leave all blank to skip a tier.</p>
+              </div>
 
+              {/* Image */}
+              <div className="flex flex-col gap-2">
+                <label className={labelCls}>Tile image (optional)</label>
                 {cropSrc?.pos === selected ? (
-                  <TileImageCropper
-                    imageSrc={cropSrc.src}
-                    onDone={onCropDone}
-                    onCancel={onCropCancel}
-                  />
+                  <TileImageCropper imageSrc={cropSrc.src} onDone={onCropDone} onCancel={onCropCancel} />
                 ) : (
                   <>
                     {selectedTile!.imageUrl && (
-                      <div className="relative w-full aspect-square rounded-lg overflow-hidden bg-gray-800">
+                      <div className="relative w-full aspect-square rounded-lg overflow-hidden bg-[#130a28]">
                         <Image src={selectedTile!.imageUrl} alt="Tile" fill sizes="400px" className="object-cover" />
                         <button
                           type="button"
                           onClick={async () => {
                             const existingId = board?.tiles.find((t) => t.position === selected)?.id;
-                            if (existingId) {
-                              await fetch("/api/admin/tiles/image", {
-                                method: "DELETE",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ tileId: existingId }),
-                              });
-                            }
-                            updateTile(selected, "imageUrl", null);
+                            if (existingId) await fetch("/api/admin/tiles/image", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tileId: existingId }) });
+                            setTiles((prev) => ({ ...prev, [selected]: { ...prev[selected], imageUrl: null } }));
                           }}
                           className="absolute top-1.5 right-1.5 bg-black/60 hover:bg-black/80 text-white text-xs rounded px-2 py-0.5 transition-colors"
                         >
@@ -417,23 +443,13 @@ export default function BoardEditor({ board }: Props) {
                         </button>
                       </div>
                     )}
-                    <label className={`flex items-center justify-center gap-2 border-2 border-dashed border-gray-700 hover:border-gray-500 rounded-lg py-3 text-sm text-gray-400 cursor-pointer transition-colors ${imageUploading ? "opacity-50 pointer-events-none" : ""}`}>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) onFileSelected(selected, file);
-                          e.target.value = "";
-                        }}
-                      />
+                    <label className={`flex items-center justify-center gap-2 border-2 border-dashed border-purple-900/50 hover:border-purple-700/60 rounded-lg py-3 text-sm text-purple-500 cursor-pointer transition-colors ${imageUploading ? "opacity-50 pointer-events-none" : ""}`}>
+                      <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) onFileSelected(selected, f); e.target.value = ""; }} />
                       {imageUploading ? "Uploading…" : selectedTile!.imageUrl ? "Replace image" : "Upload image"}
                     </label>
                   </>
                 )}
               </div>
-
             </div>
           )}
         </div>
@@ -444,7 +460,7 @@ export default function BoardEditor({ board }: Props) {
       <button
         onClick={saveBoard}
         disabled={saving || !boardName.trim()}
-        className="self-start bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-gray-950 font-semibold rounded-lg px-6 py-2.5 transition-colors"
+        className="self-start bg-purple-700 hover:bg-purple-600 disabled:opacity-50 text-white font-semibold rounded-lg px-6 py-2.5 transition-colors purple-glow-sm"
       >
         {saving ? "Saving…" : board ? "Save changes" : "Create board"}
       </button>

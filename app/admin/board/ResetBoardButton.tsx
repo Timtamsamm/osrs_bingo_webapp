@@ -28,8 +28,8 @@ export default function ResetBoardButton() {
       <div className="bg-red-950/20 px-5 py-3 border-b border-red-900/40 flex items-center justify-between gap-4">
         <div>
           <p className="text-sm font-semibold text-red-300">Reset board</p>
-          <p className="text-xs text-gray-500 mt-0.5">
-            Deletes all submissions and clears all tile content (titles, images, points). User accounts are untouched.
+          <p className="text-xs text-purple-700/60 mt-0.5">
+            Deletes all submissions and clears all tile content (titles, images, points). Team accounts are untouched.
           </p>
         </div>
         {!confirm && (
@@ -52,7 +52,7 @@ export default function ResetBoardButton() {
             type="button"
             onClick={() => setConfirm(false)}
             disabled={loading}
-            className="px-3 py-1.5 rounded-lg text-sm text-gray-400 hover:text-white transition-colors disabled:opacity-50"
+            className="px-3 py-1.5 rounded-lg text-sm text-purple-400 hover:text-white transition-colors disabled:opacity-50"
           >
             Cancel
           </button>
@@ -68,7 +68,7 @@ export default function ResetBoardButton() {
       )}
 
       {result && !confirm && (
-        <div className="px-5 py-2 text-xs text-gray-400 bg-gray-900/40">{result}</div>
+        <div className="px-5 py-2 text-xs text-purple-500/70 bg-[#0e0820]/40">{result}</div>
       )}
     </div>
   );

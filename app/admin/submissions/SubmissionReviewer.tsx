@@ -13,8 +13,9 @@ interface Submission {
   source: string;
   dinkItemName: string | null;
   teamMember: string | null;
-  user: { username: string };
-  tile: { title: string; requiredCount: number };
+  tier: number | null;
+  team: { name: string } | null;
+  tile: { title: string };
 }
 
 export default function SubmissionReviewer({ submission: s }: { submission: Submission }) {
@@ -54,12 +55,21 @@ export default function SubmissionReviewer({ submission: s }: { submission: Subm
     router.refresh();
   }
 
+  const submitterLabel = s.team?.name
+    ? `${s.team.name}${s.teamMember ? ` · RSN: ${s.teamMember}` : ""}`
+    : s.teamMember ?? "Unknown";
+
   return (
-    <div className={`bg-gray-900 border rounded-xl overflow-hidden ${isDink ? "border-purple-700/50" : "border-gray-800"}`}>
-      <div className="flex gap-4 p-4 border-b border-gray-800 items-center">
+    <div className={`bg-[#0e0820] border rounded-xl overflow-hidden ${isDink ? "border-purple-700/50" : "border-purple-900/40"}`}>
+      <div className="flex gap-4 p-4 border-b border-purple-900/40 items-center">
         <div className="flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <p className="font-medium text-white">{s.tile.title}</p>
+            {s.tier != null && (
+              <span className="text-xs font-bold bg-purple-900/40 text-purple-200 border border-purple-700/40 rounded px-1.5 py-0.5">
+                T{s.tier}
+              </span>
+            )}
             {isDink && (
               <span className="text-xs font-semibold bg-purple-600/20 text-purple-400 border border-purple-600/30 rounded px-1.5 py-0.5">
                 Dink
@@ -71,11 +81,8 @@ export default function SubmissionReviewer({ submission: s }: { submission: Subm
               </span>
             )}
           </div>
-          <p className="text-sm text-gray-400 mt-0.5">
-            by <span className="text-gray-200">{s.user.username}</span>
-            {s.teamMember && isDink && (
-              <> · RSN: <span className="text-gray-300">{s.teamMember}</span></>
-            )}
+          <p className="text-sm text-purple-500/80 mt-0.5">
+            {submitterLabel}
             {s.dinkItemName && (
               <> · <span className="text-purple-300">{s.dinkItemName}</span></>
             )}
@@ -83,11 +90,6 @@ export default function SubmissionReviewer({ submission: s }: { submission: Subm
             <span suppressHydrationWarning>{new Date(s.createdAt).toLocaleDateString()}</span>
           </p>
         </div>
-        {s.tile.requiredCount > 1 && (
-          <span className="text-xs bg-gray-800 border border-gray-700 rounded px-2 py-1 text-gray-400">
-            needs {s.tile.requiredCount} submissions
-          </span>
-        )}
       </div>
 
       <div className="flex gap-4 p-4">
@@ -95,7 +97,7 @@ export default function SubmissionReviewer({ submission: s }: { submission: Subm
           <button
             type="button"
             onClick={() => setLightbox(true)}
-            className="relative w-64 h-36 shrink-0 rounded-lg overflow-hidden bg-gray-800 group cursor-zoom-in"
+            className="relative w-64 h-36 shrink-0 rounded-lg overflow-hidden bg-[#130a28] group cursor-zoom-in"
             title="Click to enlarge"
           >
             <Image src={s.imageUrl} alt="Submission" fill sizes="256px" className="object-cover" />
@@ -104,8 +106,8 @@ export default function SubmissionReviewer({ submission: s }: { submission: Subm
             </div>
           </button>
         ) : (
-          <div className="w-64 h-36 shrink-0 rounded-lg bg-gray-800/60 border border-gray-700/50 flex items-center justify-center">
-            <p className="text-xs text-gray-500 text-center px-4">No screenshot<br />(Dink auto-claim)</p>
+          <div className="w-64 h-36 shrink-0 rounded-lg bg-[#130a28] border border-purple-900/40 flex items-center justify-center">
+            <p className="text-xs text-purple-700/60 text-center px-4">No screenshot<br />(Dink auto-claim)</p>
           </div>
         )}
 
@@ -117,7 +119,7 @@ export default function SubmissionReviewer({ submission: s }: { submission: Subm
             <button
               type="button"
               onClick={() => setLightbox(false)}
-              className="absolute top-4 right-4 text-gray-400 hover:text-white text-2xl leading-none transition-colors"
+              className="absolute top-4 right-4 text-purple-400 hover:text-white text-2xl leading-none transition-colors"
               aria-label="Close"
             >
               ✕
@@ -134,8 +136,8 @@ export default function SubmissionReviewer({ submission: s }: { submission: Subm
 
         <div className="flex-1 flex flex-col gap-3">
           {s.note && (
-            <div className="bg-gray-800 rounded-lg px-3 py-2 text-sm text-gray-300">
-              <span className="text-gray-500 text-xs block mb-1">Player note</span>
+            <div className="bg-[#130a28] rounded-lg px-3 py-2 text-sm text-purple-200">
+              <span className="text-purple-600 text-xs block mb-1">Note</span>
               {s.note}
             </div>
           )}
@@ -145,8 +147,8 @@ export default function SubmissionReviewer({ submission: s }: { submission: Subm
               value={reviewNote}
               onChange={(e) => setReviewNote(e.target.value)}
               rows={2}
-              placeholder="Review note (optional, shown to player on rejection)"
-              className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none"
+              placeholder="Review note (optional)"
+              className="bg-[#130a28] border border-purple-900/50 rounded-lg px-3 py-2 text-white text-sm placeholder-purple-800 focus:outline-none focus:ring-2 focus:ring-purple-500/40 resize-none"
             />
           )}
 
@@ -155,25 +157,25 @@ export default function SubmissionReviewer({ submission: s }: { submission: Subm
               <button
                 onClick={() => decide("APPROVED")}
                 disabled={loading}
-                className="flex-1 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white font-semibold rounded-lg py-2 text-sm transition-colors"
+                className="flex-1 bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white font-semibold rounded-lg py-2 text-sm transition-colors"
               >
                 Approve
               </button>
             )}
-            <div className={`flex rounded-lg overflow-hidden border border-red-700/50 ${isApproved ? "flex-1" : ""}`}>
+            <div className={`flex rounded-lg overflow-hidden border border-red-800/50 ${isApproved ? "flex-1" : ""}`}>
               <button
                 onClick={() => decide("REJECTED")}
                 disabled={loading}
-                className="flex-1 bg-red-600/80 hover:bg-red-600 disabled:opacity-50 text-white font-semibold py-2 text-sm transition-colors"
+                className="flex-1 bg-red-900/70 hover:bg-red-800 disabled:opacity-50 text-white font-semibold py-2 text-sm transition-colors"
               >
                 Reject
               </button>
-              <div className="w-px bg-red-700/50" />
+              <div className="w-px bg-red-800/50" />
               <button
                 onClick={remove}
                 disabled={loading}
                 title="Delete submission"
-                className="px-3 bg-red-900/60 hover:bg-red-800 disabled:opacity-50 text-red-300 transition-colors"
+                className="px-3 bg-red-950/60 hover:bg-red-900 disabled:opacity-50 text-red-400 transition-colors"
               >
                 🗑
               </button>

@@ -6,7 +6,7 @@ import type { BossKCs } from "@/lib/temple";
 
 export type PlayerEntry = {
   memberName: string;
-  teamUsername: string;
+  teamName: string;
   snapshot: BossKCs | null;
 };
 
@@ -21,25 +21,24 @@ export default function PlayersFilter({ players, teams, bosses }: Props) {
   const [bossFilter, setBossFilter] = useState<string>("");
 
   const filtered = players.filter((p) => {
-    if (teamFilter && p.teamUsername !== teamFilter) return false;
+    if (teamFilter && p.teamName !== teamFilter) return false;
     if (bossFilter && (!p.snapshot || !p.snapshot[bossFilter])) return false;
     return true;
   });
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Filters row */}
       <div className="flex flex-wrap items-center gap-3">
-        {/* Team filter pills */}
         <div className="flex flex-wrap gap-1.5">
           <button
             type="button"
             onClick={() => setTeamFilter(null)}
             className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
               teamFilter === null
-                ? "bg-amber-500 text-gray-950"
-                : "bg-stone-800/80 text-stone-400 hover:text-white"
+                ? "text-white purple-glow-sm"
+                : "bg-[#0e0820] border border-purple-900/40 text-purple-400 hover:text-purple-200"
             }`}
+            style={teamFilter === null ? { backgroundColor: "rgb(var(--accent) / 0.55)" } : undefined}
           >
             All teams
           </button>
@@ -50,21 +49,21 @@ export default function PlayersFilter({ players, teams, bosses }: Props) {
               onClick={() => setTeamFilter(teamFilter === team ? null : team)}
               className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
                 teamFilter === team
-                  ? "bg-amber-500 text-gray-950"
-                  : "bg-stone-800/80 text-stone-400 hover:text-white"
+                  ? "text-white purple-glow-sm"
+                  : "bg-[#0e0820] border border-purple-900/40 text-purple-400 hover:text-purple-200"
               }`}
+              style={teamFilter === team ? { backgroundColor: "rgb(var(--accent) / 0.55)" } : undefined}
             >
               {team}
             </button>
           ))}
         </div>
 
-        {/* Boss filter dropdown */}
         {bosses.length > 0 && (
           <select
             value={bossFilter}
             onChange={(e) => setBossFilter(e.target.value)}
-            className="bg-stone-800/80 border border-stone-700/60 rounded-lg px-3 py-1 text-xs text-gray-300 focus:outline-none focus:border-amber-500 ml-auto"
+            className="bg-[#0e0820] border border-purple-900/40 rounded-lg px-3 py-1 text-xs text-purple-300 focus:outline-none focus:border-purple-500 ml-auto"
           >
             <option value="">All bosses</option>
             {bosses.map((b) => (
@@ -74,14 +73,13 @@ export default function PlayersFilter({ players, teams, bosses }: Props) {
         )}
       </div>
 
-      {/* Player list */}
       {filtered.length === 0 ? (
-        <p className="text-gray-500 text-sm">No players match the current filters.</p>
+        <p className="text-purple-500/60 text-sm">No players match the current filters.</p>
       ) : (
         <div className="flex flex-col gap-2">
-          {filtered.map(({ memberName, teamUsername, snapshot }) => (
+          {filtered.map(({ memberName, teamName, snapshot }) => (
             <div key={memberName}>
-              <p className="text-xs text-gray-600 mb-1 px-1">{teamUsername}</p>
+              <p className="text-xs text-purple-700/70 mb-1 px-1">{teamName}</p>
               <PlayerCard memberName={memberName} snapshot={snapshot} />
             </div>
           ))}

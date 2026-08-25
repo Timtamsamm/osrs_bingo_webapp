@@ -1,58 +1,60 @@
 import { prisma } from "@/lib/prisma";
 import SubmissionReviewer from "./SubmissionReviewer";
-import PlayerFilter from "./PlayerFilter";
+import TeamFilter from "./TeamFilter";
 import { Suspense } from "react";
 
 interface Props {
-  searchParams: Promise<{ player?: string }>;
+  searchParams: Promise<{ team?: string }>;
 }
 
 export default async function AdminSubmissionsPage({ searchParams }: Props) {
-  const { player } = await searchParams;
+  const { team } = await searchParams;
 
-  const playerFilter = player ? { user: { username: player } } : {};
+  const teamFilter = team ? { team: { name: team } } : {};
 
-  const [pending, dinkApproved, players] = await Promise.all([
+  const [pending, dinkApproved, allTeams] = await Promise.all([
     prisma.submission.findMany({
-      where: { status: "PENDING", ...playerFilter },
+      where: { status: "PENDING", ...teamFilter },
       orderBy: { createdAt: "asc" },
       include: {
-        user: { select: { username: true } },
-        tile: { select: { title: true, requiredCount: true } },
+        team: { select: { name: true } },
+        tile: { select: { title: true } },
       },
     }),
     prisma.submission.findMany({
-      where: { status: "APPROVED", source: "dink", ...playerFilter },
+      where: { status: "APPROVED", source: "dink", ...teamFilter },
       orderBy: { createdAt: "desc" },
       take: 100,
       include: {
-        user: { select: { username: true } },
-        tile: { select: { title: true, requiredCount: true } },
+        team: { select: { name: true } },
+        tile: { select: { title: true } },
       },
     }),
-    prisma.user.findMany({
-      where: { submissions: { some: { status: "PENDING" } } },
-      select: { username: true },
-      orderBy: { username: "asc" },
+    prisma.team.findMany({
+      where: { submissions: { some: {} } },
+      select: { name: true },
+      orderBy: { name: "asc" },
     }),
   ]);
 
-  const playerNames = players.map((p) => p.username);
+  const teamNames = allTeams.map((t) => t.name);
 
   return (
-    <div className="max-w-4xl">
+    <div>
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-2xl font-bold">Submissions</h1>
+        <h1 className="font-[family-name:var(--font-cinzel)] text-2xl font-bold text-purple-100 heading-glow">
+          Submissions
+        </h1>
         <div className="flex items-center gap-4">
-          <span className="text-sm text-gray-400">{pending.length} pending</span>
+          <span className="text-sm text-purple-500/80">{pending.length} pending</span>
           <Suspense>
-            <PlayerFilter players={playerNames} />
+            <TeamFilter teams={teamNames} />
           </Suspense>
         </div>
       </div>
 
       {pending.length === 0 ? (
-        <p className="text-gray-500">{player ? `No pending submissions for ${player}.` : "No pending submissions."}</p>
+        <p className="text-purple-600/70">{team ? `No pending submissions for ${team}.` : "No pending submissions."}</p>
       ) : (
         <div className="flex flex-col gap-4">
           {pending.map((s) => (
@@ -63,9 +65,9 @@ export default async function AdminSubmissionsPage({ searchParams }: Props) {
 
       {dinkApproved.length > 0 && (
         <div className="mt-10">
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">
+          <h2 className="text-sm font-semibold text-purple-600 uppercase tracking-wider mb-4">
             Dink Auto-Approved
-            <span className="ml-2 text-gray-600 font-normal normal-case">— reject to undo a false positive</span>
+            <span className="ml-2 text-purple-700 font-normal normal-case">— reject to undo a false positive</span>
           </h2>
           <div className="flex flex-col gap-4">
             {dinkApproved.map((s) => (

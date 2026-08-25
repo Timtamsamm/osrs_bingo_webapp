@@ -13,11 +13,8 @@ type Status = "PENDING" | "APPROVED" | "REJECTED";
 export interface TileData {
   id: string;
   title: string;
-  points: number;
-  pointsPerSubmission: number;
-  requiredCount: number;
   imageUrl: string | null;
-  userSubmissions: Array<{ status: Status; teamMember: string | null }>;
+  userSubmissions: Array<{ status: Status; teamMember: string | null; tier: number | null }>;
 }
 
 interface Props {
@@ -38,13 +35,13 @@ export default function LeaderboardRow({ player, tiles, totalPoints, rank, isCur
     player.teamMembers.map((name, i) => [name, MEMBER_COLORS[i % MEMBER_COLORS.length]])
   );
 
-  const memberStats: Map<string, { tileIds: Set<string>; points: number }> = new Map();
+  const memberStats: Map<string, { tileIds: Set<string>; submissions: number }> = new Map();
   for (const tile of tiles) {
     for (const sub of tile.userSubmissions) {
       if (sub.status === "REJECTED" || !sub.teamMember) continue;
-      const existing = memberStats.get(sub.teamMember) ?? { tileIds: new Set<string>(), points: 0 };
+      const existing = memberStats.get(sub.teamMember) ?? { tileIds: new Set<string>(), submissions: 0 };
       existing.tileIds.add(tile.id);
-      existing.points += tile.pointsPerSubmission;
+      existing.submissions++;
       memberStats.set(sub.teamMember, existing);
     }
   }
@@ -52,13 +49,13 @@ export default function LeaderboardRow({ player, tiles, totalPoints, rank, isCur
   const memberRows = player.teamMembers.map((name) => ({
     name,
     tiles: memberStats.get(name)?.tileIds.size ?? 0,
-    points: memberStats.get(name)?.points ?? 0,
+    submissions: memberStats.get(name)?.submissions ?? 0,
   }));
 
   const mvp = memberRows.length > 1
-    ? memberRows.reduce((best, m) => m.points > best.points ? m : best, memberRows[0])
+    ? memberRows.reduce((best, m) => m.submissions > best.submissions ? m : best, memberRows[0])
     : null;
-  const mvpName = mvp && mvp.points > 0 ? mvp.name : null;
+  const mvpName = mvp && mvp.submissions > 0 ? mvp.name : null;
 
   return (
     <div className={`rounded-xl border overflow-hidden ${isCurrentUser ? "border-amber-500/60" : "border-stone-700/60"}`}>
@@ -196,7 +193,8 @@ export default function LeaderboardRow({ player, tiles, totalPoints, rank, isCur
               <p className="text-xs text-gray-500 mb-3">Team members</p>
               <div className="flex flex-col gap-2">
                 {memberRows.map((m) => {
-                  const memberPct = totalPoints > 0 ? (m.points / totalPoints) * 100 : 0;
+                  const maxSubs = Math.max(1, ...memberRows.map((r) => r.submissions));
+                  const memberPct = (m.submissions / maxSubs) * 100;
                   return (
                     <div key={m.name} className="flex items-center gap-3">
                       <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: memberColorMap.get(m.name) ?? "#888" }} />
@@ -211,10 +209,7 @@ export default function LeaderboardRow({ player, tiles, totalPoints, rank, isCur
                         />
                       </div>
                       <span className="text-xs text-gray-500 tabular-nums shrink-0 w-14 text-right">
-                        {m.tiles} {m.tiles === 1 ? "submission" : "submissions"}
-                      </span>
-                      <span className="text-xs text-amber-400 tabular-nums shrink-0 w-14 text-right">
-                        {+m.points.toFixed(1)} pts
+                        {m.submissions} drop{m.submissions === 1 ? "" : "s"}
                       </span>
                     </div>
                   );

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { put } from "@vercel/blob";
 
-type DinkItemEntry = { id: number; name: string };
+type TierDef = { tier: number; points: number; requiredCount: number; dinkItems: Array<{ id: number; name: string }> };
 
 function normalizeRsn(rsn: string): string {
   return rsn.trim().replace(/[_ ]/g, " ").toLowerCase();
@@ -20,8 +20,6 @@ export async function POST(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const token = searchParams.get("token");
 
-  // Parse body — Dink sends multipart/form-data when a screenshot is attached,
-  // plain JSON otherwise. payload_json holds the notification; file holds the image.
   let payload: Record<string, unknown>;
   let imageFile: File | null = null;
 
@@ -50,7 +48,6 @@ export async function POST(req: NextRequest) {
 
   if (!playerName) return NextResponse.json({ status: "ignored" });
 
-  // Validate token and load board with tile dinkItems
   const board = await prisma.bingoBoard.findFirst({
     where: { active: true },
     select: {
@@ -62,8 +59,7 @@ export async function POST(req: NextRequest) {
         select: {
           id: true,
           title: true,
-          requiredCount: true,
-          dinkItems: true,
+          tiers: true,
         },
       },
     },
@@ -74,25 +70,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "bad_token" }, { status: 401 });
   }
 
-  // Check event window
   const now = new Date();
   if (board.startsAt && board.startsAt > now) return NextResponse.json({ status: "event_closed" });
   if (board.endsAt && board.endsAt < now) return NextResponse.json({ status: "event_closed" });
 
-  // Match RSN to a team (user with this name in their teamMembers array)
   const normalizedRsn = normalizeRsn(playerName);
-  const allPlayers = await prisma.user.findMany({
-    where: { role: "PLAYER" },
-    select: { id: true, teamMembers: true },
+  const allParticipants = await prisma.participant.findMany({
+    select: { id: true, rsn: true, teamId: true },
   });
 
-  const matchedUser = allPlayers.find((u) =>
-    u.teamMembers.some((m) => normalizeRsn(m) === normalizedRsn)
+  const matchedParticipant = allParticipants.find(
+    (p) => normalizeRsn(p.rsn) === normalizedRsn
   );
 
-  if (!matchedUser) return NextResponse.json({ status: "not_on_team" });
+  if (!matchedParticipant) return NextResponse.json({ status: "not_on_team" });
 
-  // Extract dropped items from the notification payload
   const droppedItems: { id: number; name: string }[] = [];
 
   if (type === "LOOT") {
@@ -109,28 +101,28 @@ export async function POST(req: NextRequest) {
       droppedItems.push({ id: itemId, name: itemName });
     }
   } else {
-    // DEATH, LEVEL, SLAYER, etc. — not relevant for bingo
     return NextResponse.json({ status: "ignored" });
   }
 
   if (droppedItems.length === 0) return NextResponse.json({ status: "no_match" });
 
-  // Build itemId → tile lookup from all tile dinkItems
-  const itemTileMap = new Map<number, { id: string; title: string; requiredCount: number }>();
+  // Build item ID → {tileId, tileTitle, tierDef} map across all tiles and tiers
+  const itemTierMap = new Map<number, { tileId: string; tileTitle: string; tierDef: TierDef }>();
   for (const tile of board.tiles) {
-    const entries = (tile.dinkItems as DinkItemEntry[]) ?? [];
-    for (const entry of entries) {
-      if (!itemTileMap.has(entry.id)) {
-        itemTileMap.set(entry.id, { id: tile.id, title: tile.title, requiredCount: tile.requiredCount });
+    const tiers = (tile.tiers as TierDef[]) ?? [];
+    for (const tierDef of tiers) {
+      for (const entry of tierDef.dinkItems) {
+        if (!itemTierMap.has(entry.id)) {
+          itemTierMap.set(entry.id, { tileId: tile.id, tileTitle: tile.title, tierDef });
+        }
       }
     }
   }
 
-  // Upload screenshot once if present, reuse URL for all matched tiles
   let imageUrl: string | null = null;
   if (imageFile && imageFile.size > 0) {
     const { url } = await put(
-      `submissions/dink/${matchedUser.id}/${Date.now()}.png`,
+      `submissions/dink/${matchedParticipant.teamId}/${Date.now()}.png`,
       imageFile,
       { access: "public" }
     );
@@ -140,14 +132,16 @@ export async function POST(req: NextRequest) {
   const matched: string[] = [];
 
   for (const item of droppedItems) {
-    const tile = itemTileMap.get(item.id);
-    if (!tile) continue;
+    const match = itemTierMap.get(item.id);
+    if (!match) continue;
+    const { tileId, tileTitle, tierDef } = match;
 
-    // Skip if this exact item already has a non-rejected Dink submission for this tile/user
+    // Skip if this exact item was already claimed for this tier (per team)
     const alreadyClaimed = await prisma.submission.findFirst({
       where: {
-        userId: matchedUser.id,
-        tileId: tile.id,
+        teamId: matchedParticipant.teamId,
+        tileId,
+        tier: tierDef.tier,
         dinkItemId: item.id,
         status: { not: "REJECTED" },
       },
@@ -155,16 +149,21 @@ export async function POST(req: NextRequest) {
     });
     if (alreadyClaimed) continue;
 
-    // Skip if tile is already at requiredCount with non-rejected submissions
+    // Skip if this tier is already full for this team
     const activeCount = await prisma.submission.count({
-      where: { userId: matchedUser.id, tileId: tile.id, status: { not: "REJECTED" } },
+      where: {
+        teamId: matchedParticipant.teamId,
+        tileId,
+        tier: tierDef.tier,
+        status: { not: "REJECTED" },
+      },
     });
-    if (activeCount >= tile.requiredCount) continue;
+    if (activeCount >= tierDef.requiredCount) continue;
 
     await prisma.submission.create({
       data: {
-        userId: matchedUser.id,
-        tileId: tile.id,
+        teamId: matchedParticipant.teamId,
+        tileId,
         imageUrl,
         status: "APPROVED",
         reviewedAt: now,
@@ -172,10 +171,11 @@ export async function POST(req: NextRequest) {
         dinkItemId: item.id,
         dinkItemName: item.name,
         teamMember: playerName,
+        tier: tierDef.tier,
       },
     });
 
-    matched.push(tile.title);
+    matched.push(`${tileTitle} (T${tierDef.tier})`);
   }
 
   return NextResponse.json({

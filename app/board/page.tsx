@@ -1,26 +1,19 @@
 export const dynamic = "force-dynamic";
 
-import { auth, signOut } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import BoardTabNav from "@/app/components/BoardTabNav";
 import Countdown from "@/app/components/Countdown";
-import GameFrame from "@/app/components/GameFrame";
-import { checkEventPasscode } from "@/lib/event-passcode";
 import BoardView from "./BoardView";
-import type { TileSummary } from "./BoardView";
+import type { TileSummary, TeamInfo, LineSummary, BonusConfig } from "./BoardView";
+
+type TierDef = { tier: number; points: number; requiredCount: number; dinkItems: Array<{ id: number; name: string }> };
+
+const ROWS = Array.from({ length: 5 }, (_, r) => [r*5, r*5+1, r*5+2, r*5+3, r*5+4]);
+const COLS = Array.from({ length: 5 }, (_, c) => [c, c+5, c+10, c+15, c+20]);
 
 export default async function BoardPage() {
-  const session = await auth();
-  if (!session) redirect("/login");
-  await checkEventPasscode(session.user.role);
-
-  const [currentUser, board] = await Promise.all([
-    prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { teamMembers: true, role: true },
-    }),
+  const [board, teams] = await Promise.all([
     prisma.bingoBoard.findFirst({
       where: { active: true },
       include: {
@@ -28,135 +21,232 @@ export default async function BoardPage() {
           orderBy: { position: "asc" },
           include: {
             submissions: {
-              where: { userId: session.user.id },
-              select: { id: true, status: true },
+              where: { status: { not: "REJECTED" }, teamId: { not: null } },
+              select: { teamId: true, status: true, tier: true },
             },
           },
         },
       },
     }),
+    prisma.team.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, color: true } }),
   ]);
 
-  // Pre-event gate — show countdown screen if event hasn't started yet
-  if (board?.startsAt && board.startsAt > new Date()) {
-    return (
-      <GameFrame>
-        <div className="h-full flex flex-col items-center justify-center p-4">
-          <div className="flex flex-col items-center gap-6 text-center">
-            <div>
-              <h1 className="text-3xl font-bold">{board.name}</h1>
-              {board.description && <p className="text-gray-400 mt-2 text-sm">{board.description}</p>}
-            </div>
-            <Countdown endsAt={board.startsAt.toISOString()} label="Starts in" reloadOnExpire />
-            <p className="text-sm text-gray-500">
-              {board.startsAt.toLocaleString(undefined, { dateStyle: "long", timeStyle: "short" })}
-            </p>
-            <form action={async () => { "use server"; await signOut({ redirectTo: "/login" }); }}>
-              <button type="submit" className="text-xs text-gray-600 hover:text-gray-400 transition-colors mt-4">
-                Sign out
-              </button>
-            </form>
-          </div>
-        </div>
-      </GameFrame>
-    );
+  const rawBonuses = board?.rowColBonuses as { t1?: number; t2?: number; t3?: number } | null;
+  const bonusConfig: BonusConfig = {
+    t1: rawBonuses?.t1 ?? 0,
+    t2: rawBonuses?.t2 ?? 0,
+    t3: rawBonuses?.t3 ?? 0,
+  };
+
+  // Index tiles by position for line calculations
+  const tileByPos = new Map((board?.tiles ?? []).map((t) => [t.position, t]));
+
+  // For a set of positions, return the bonus tier earned by a team (null = line not complete)
+  function getBonusTierForLine(positions: number[], teamId: string): number | null {
+    const tilesInLine = positions.map((p) => tileByPos.get(p));
+    // Any position missing or having no tiers defined means the line can't be completed
+    if (tilesInLine.some((t) => !t || ((t.tiers as TierDef[]) ?? []).length === 0)) return null;
+
+    const bestPerTile: (number | null)[] = tilesInLine.map((tile) => {
+      const tierDefs = (tile!.tiers as TierDef[]) ?? [];
+      const teamSubs = tile!.submissions.filter((s) => s.teamId === teamId);
+      const achieved = tierDefs
+        .filter((td) => teamSubs.filter((s) => s.tier === td.tier && s.status === "APPROVED").length >= td.requiredCount)
+        .map((td) => td.tier);
+      return achieved.length > 0 ? Math.min(...achieved) : null; // lowest number = best tier
+    });
+
+    if (bestPerTile.some((b) => b === null)) return null; // at least one tile not done
+
+    return Math.max(...(bestPerTile as number[])); // highest number among bests = weakest tier
   }
 
-  const earnedPoints = board?.tiles.reduce((sum, tile) => {
-    const active = tile.submissions.filter((s) => s.status !== "REJECTED").length;
-    return sum + Math.min(active, tile.requiredCount) * tile.pointsPerSubmission;
-  }, 0) ?? 0;
+  function bonusPts(tier: number | null): number {
+    if (tier === null) return 0;
+    if (tier === 1) return bonusConfig.t1;
+    if (tier === 2) return bonusConfig.t2;
+    return bonusConfig.t3;
+  }
 
-  const totalPoints = board?.tiles.reduce((sum, tile) => sum + tile.points, 0) ?? 0;
+  const teamInfoMap = new Map<string, TeamInfo>();
+  teams.forEach((team) => {
+    let earnedPoints = 0;
+    let completedTiles = 0;
+
+    for (const tile of board?.tiles ?? []) {
+      const teamSubs = tile.submissions.filter((s) => s.teamId === team.id);
+      const tiers = (tile.tiers as TierDef[]) ?? [];
+      for (const tierDef of tiers) {
+        const approvedForTier = teamSubs.filter((s) => s.tier === tierDef.tier && s.status === "APPROVED").length;
+        if (approvedForTier >= tierDef.requiredCount) earnedPoints += tierDef.points;
+      }
+      const t1 = tiers.find((t) => t.tier === 1);
+      if (t1 && teamSubs.filter((s) => s.tier === 1 && s.status === "APPROVED").length >= t1.requiredCount) {
+        completedTiles++;
+      }
+    }
+
+    // Row and column bonuses
+    for (const row of ROWS) earnedPoints += bonusPts(getBonusTierForLine(row, team.id));
+    for (const col of COLS) earnedPoints += bonusPts(getBonusTierForLine(col, team.id));
+
+    teamInfoMap.set(team.id, { id: team.id, name: team.name, color: team.color, earnedPoints, completedTiles });
+  });
+
+  const teamList: TeamInfo[] = [...teamInfoMap.values()].sort(
+    (a, b) => b.earnedPoints - a.earnedPoints || a.name.localeCompare(b.name)
+  );
+
+  const tilePts = board?.tiles.reduce((sum, tile) => {
+    return sum + ((tile.tiers as TierDef[]) ?? []).reduce((s, t) => s + t.points, 0);
+  }, 0) ?? 0;
+  const maxLineBonus = Math.max(bonusConfig.t1, bonusConfig.t2, bonusConfig.t3);
+  const totalPoints = tilePts + 10 * maxLineBonus;
+
+  const totalTiles = board?.tiles.filter((t) => t.title.trim()).length ?? 0;
 
   const tiles: TileSummary[] = (board?.tiles ?? []).map((tile) => {
-    const approved = tile.submissions.filter((s) => s.status === "APPROVED").length;
-    const active = tile.submissions.filter((s) => s.status !== "REJECTED").length;
-    const onlyRejected = tile.submissions.length > 0 && active === 0;
-    const completed = approved >= tile.requiredCount;
-    const inProgress = tile.requiredCount > 1 && active > 0 && !completed;
-    const awaiting = !completed && !inProgress && active > 0;
+    const tierDefs = (tile.tiers as TierDef[]) ?? [];
     return {
       id: tile.id,
+      position: tile.position,
       title: tile.title,
       description: tile.description,
-      points: tile.points,
-      pointsPerSubmission: tile.pointsPerSubmission,
-      requiredCount: tile.requiredCount,
+      points: tierDefs.reduce((sum, t) => sum + t.points, 0),
       imageUrl: tile.imageUrl,
-      active,
-      approved,
-      completed,
-      inProgress,
-      awaiting,
-      onlyRejected,
+      teamStatuses: teams.map((team) => {
+        const teamSubs = tile.submissions.filter((s) => s.teamId === team.id);
+        const achievedTiers = tierDefs
+          .filter((td) => teamSubs.filter((s) => s.tier === td.tier && s.status === "APPROVED").length >= td.requiredCount)
+          .map((td) => td.tier);
+        return {
+          teamId: team.id,
+          completed: achievedTiers.includes(1),
+          inProgress: !achievedTiers.includes(1) && achievedTiers.length > 0,
+          achievedTiers,
+        };
+      }),
     };
   });
 
+  // Line summaries for the board grid
+  const rowSummaries: LineSummary[] = ROWS.map((positions, i) => ({
+    index: i,
+    statuses: teams.map((team) => ({
+      teamId: team.id,
+      bonusTier: getBonusTierForLine(positions, team.id),
+    })),
+  }));
+
+  const colSummaries: LineSummary[] = COLS.map((positions, i) => ({
+    index: i,
+    statuses: teams.map((team) => ({
+      teamId: team.id,
+      bonusTier: getBonusTierForLine(positions, team.id),
+    })),
+  }));
+
   const boardIsEmpty = !board || board.tiles.every((t) => !t.title.trim());
 
+  if (board?.startsAt && board.startsAt > new Date()) {
+    return (
+      <div className="min-h-screen bg-base flex items-center justify-center p-6">
+        <div className="text-center flex flex-col items-center gap-6">
+          <p className="text-xs tracking-[0.3em] text-purple-500 uppercase">Upcoming Event</p>
+          <h1 className="font-[family-name:var(--font-cinzel)] text-4xl font-black text-white heading-glow">
+            {board.name}
+          </h1>
+          {board.description && <p className="text-purple-300/70 text-sm max-w-sm">{board.description}</p>}
+          <Countdown endsAt={board.startsAt.toISOString()} label="Starts in" reloadOnExpire />
+          <p className="text-sm text-purple-500/60">
+            {board.startsAt.toLocaleString(undefined, { dateStyle: "long", timeStyle: "short" })}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const medals = ["🥇", "🥈", "🥉"];
+
   return (
-    <GameFrame>
-      <div className="max-w-3xl mx-auto p-4">
-        <div className="relative mb-6 text-center pt-3">
-          <h1 className="text-2xl font-bold">{board?.name ?? "Bingo Board"}</h1>
-          {board?.description && (
-            <p className="text-gray-400 text-sm mt-1">{board.description}</p>
-          )}
-          <div className="absolute right-0 top-0 flex flex-col items-end gap-2">
-            {board && (
-              <p className="text-sm font-semibold">
-                <span className="text-amber-400">{+earnedPoints.toFixed(1)}</span>
-                <span className="text-gray-500"> / {+totalPoints.toFixed(1)} pts</span>
-              </p>
-            )}
-            <div className="flex items-center gap-3">
-              {currentUser?.role === "ADMIN" && (
-                <Link href="/admin" className="text-xs text-amber-500 hover:text-amber-400 transition-colors font-medium">
-                  Admin
-                </Link>
-              )}
-              {currentUser?.role === "PLAYER" && (
-                <Link href="/team" className="text-xs text-gray-500 hover:text-gray-300 transition-colors">
-                  My Team
-                </Link>
-              )}
-              <form action={async () => { "use server"; await signOut({ redirectTo: "/login" }); }}>
-                <button type="submit" className="text-xs text-gray-600 hover:text-gray-400 transition-colors">
-                  Sign out
-                </button>
-              </form>
+    <div className="min-h-screen bg-base text-white">
+      <div className="max-w-5xl mx-auto px-4 py-8">
+
+        {/* Header */}
+        <div className="text-center mb-8 relative">
+          <p className="text-xs tracking-[0.3em] text-purple-500 uppercase mb-2">
+            {board?.description ?? "Bingo Event"}
+          </p>
+          <h1 className="font-[family-name:var(--font-cinzel)] text-4xl md:text-5xl font-black text-white heading-glow">
+            {board?.name ?? "Bingo Board"}
+          </h1>
+          {board?.endsAt && (
+            <div className="mt-4">
+              <Countdown endsAt={board.endsAt.toISOString()} label="Ends in" />
             </div>
+          )}
+          <div className="absolute right-0 top-0">
+            <Link href="/admin" className="text-xs text-purple-500 hover:text-purple-300 transition-colors font-medium">
+              Admin →
+            </Link>
           </div>
         </div>
 
-        {board?.endsAt && <Countdown endsAt={board.endsAt.toISOString()} label="Ends in" />}
-
-        {currentUser?.role === "PLAYER" && currentUser.teamMembers.length === 0 && (
-          <Link
-            href="/team"
-            className="flex items-center justify-between bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 mb-4 hover:bg-amber-500/20 transition-colors"
-          >
-            <div>
-              <p className="text-sm font-medium text-amber-300">Set up your team roster</p>
-              <p className="text-xs text-amber-500/70 mt-0.5">Add your team members so they appear on the leaderboard</p>
+        {/* Team standings */}
+        {teamList.length > 0 && totalPoints > 0 && (
+          <div className="mb-8 border border-purple-900/40 rounded-2xl overflow-hidden purple-glow-sm">
+            <div className="px-5 py-3 border-b border-purple-900/30 bg-surface/40">
+              <p className="text-xs tracking-[0.2em] text-purple-400 uppercase font-semibold">Standings</p>
             </div>
-            <span className="text-amber-400 text-sm shrink-0 ml-4">→</span>
-          </Link>
+            <div className="divide-y divide-purple-900/20">
+              {teamList.map((team, i) => {
+                const pct = totalPoints > 0 ? (team.earnedPoints / totalPoints) * 100 : 0;
+                return (
+                  <div key={team.id} className="flex items-center gap-4 px-5 py-3.5 bg-surface/60 hover:bg-raised/60 transition-colors">
+                    <span className="text-base w-6 text-center shrink-0 select-none">
+                      {medals[i] ?? <span className="text-purple-700 text-sm">{i + 1}</span>}
+                    </span>
+                    <span className="w-2.5 h-2.5 rounded-full shrink-0 ring-1 ring-white/10" style={{ background: team.color, boxShadow: `0 0 6px ${team.color}80` }} />
+                    <span className="text-sm font-semibold text-white flex-1 truncate">{team.name}</span>
+                    <div className="hidden sm:flex items-center gap-2 w-36">
+                      <div className="flex-1 h-1.5 bg-purple-950/60 rounded-full overflow-hidden">
+                        <div className="h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(pct, 100)}%`, background: team.color, boxShadow: `0 0 4px ${team.color}` }} />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0 text-right">
+                      <span className="text-xs tabular-nums">
+                        <span className="font-bold text-sm" style={{ color: team.color }}>{+team.earnedPoints.toFixed(1)}</span>
+                        <span className="text-purple-600"> / {+totalPoints.toFixed(1)} pts</span>
+                      </span>
+                      <span className="text-xs text-purple-600 tabular-nums w-16 text-right hidden sm:block">
+                        {team.completedTiles}/{totalTiles} tiles
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         )}
 
         <BoardTabNav />
 
         {boardIsEmpty ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <p className="text-4xl mb-4">🔨</p>
-            <p className="text-lg font-semibold text-gray-300">The board is still being designed</p>
-            <p className="text-sm text-gray-500 mt-1">Check back soon — the next event is being set up.</p>
+          <div className="flex flex-col items-center justify-center py-24 text-center">
+            <p className="text-5xl mb-5 opacity-40">⬛</p>
+            <p className="text-lg font-semibold text-purple-200/60">The board is still being set up</p>
+            <p className="text-sm text-purple-500/40 mt-1">Check back soon.</p>
           </div>
         ) : (
-          <BoardView tiles={tiles} />
+          <BoardView
+            tiles={tiles}
+            teams={teamList}
+            rowSummaries={rowSummaries}
+            colSummaries={colSummaries}
+            bonusConfig={bonusConfig}
+          />
         )}
       </div>
-    </GameFrame>
+    </div>
   );
 }

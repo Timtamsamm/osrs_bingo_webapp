@@ -9,9 +9,14 @@ export const authConfig: NextAuthConfig = {
     authorized({ auth, request: { nextUrl } }) {
       const isLoggedIn = !!auth?.user
       const { pathname } = nextUrl
-      // Always allow auth API routes, the login page, and inbound webhooks
+      // Always allow auth API routes, login page, and inbound webhooks
       if (pathname.startsWith("/api/auth") || pathname === "/login" || pathname.startsWith("/api/webhook")) return true
-      return isLoggedIn
+      // Admin routes (pages + API) require an authenticated admin
+      if (pathname.startsWith("/admin") || pathname.startsWith("/api/admin")) {
+        return isLoggedIn && (auth?.user as { role?: string })?.role === "ADMIN"
+      }
+      // Everything else is public
+      return true
     },
     jwt({ token, user }) {
       if (user) {

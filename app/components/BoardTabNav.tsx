@@ -7,10 +7,9 @@ export default function BoardTabNav() {
   const pathname = usePathname();
 
   return (
-    <div className="flex justify-center mb-8">
-      <div className="flex bg-stone-900/90 border border-stone-700/60 rounded-xl p-1 gap-1">
+    <div className="flex justify-center mb-6">
+      <div className="flex bg-surface/80 border border-purple-900/40 rounded-xl p-1 gap-1">
         <TabLink href="/board" active={pathname === "/board"}>Board</TabLink>
-        <TabLink href="/leaderboard" active={pathname === "/leaderboard"}>Leaderboard</TabLink>
         <TabLink href="/players" active={pathname === "/players"}>Players</TabLink>
       </div>
     </div>
@@ -21,9 +20,13 @@ function TabLink({ href, active, children }: { href: string; active: boolean; ch
   return (
     <Link
       href={href}
-      className={`px-6 py-2 rounded-lg text-sm font-semibold transition-colors ${
-        active ? "bg-amber-500 text-stone-950" : "text-stone-400 hover:text-white"
+      className={`px-6 py-2 rounded-lg text-sm font-semibold transition-all ${
+        active ? "text-white" : "text-purple-500 hover:text-purple-300"
       }`}
+      style={active ? {
+        backgroundColor: "rgb(var(--accent) / 0.55)",
+        boxShadow: "0 0 6px rgb(var(--accent) / 0.45), 0 0 18px rgb(var(--accent) / 0.12)",
+      } : undefined}
     >
       {children}
     </Link>

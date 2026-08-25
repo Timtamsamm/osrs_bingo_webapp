@@ -20,27 +20,41 @@ async function getCroppedBlob(
 ): Promise<Blob> {
   const img = await createImageBitmap(await fetch(imageSrc).then((r) => r.blob()));
 
-  const srcW = croppedArea.width;
-  const srcH = croppedArea.height;
-  const scale = Math.max(srcW, srcH) > MAX_SIZE ? MAX_SIZE / Math.max(srcW, srcH) : 1;
-  const outW = Math.round(srcW * scale);
-  const outH = Math.round(srcH * scale);
-
+  // Output is always square at MAX_SIZE
+  const outSize = MAX_SIZE;
   const canvas = document.createElement("canvas");
-  canvas.width = outW;
-  canvas.height = outH;
+  canvas.width = outSize;
+  canvas.height = outSize;
   const ctx = canvas.getContext("2d")!;
 
+  // Fill background (covers any letterbox area when zoomed out past image edge)
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, outSize, outSize);
+
   ctx.save();
-  ctx.translate(outW / 2, outH / 2);
+  ctx.translate(outSize / 2, outSize / 2);
   if (rotation) ctx.rotate((rotation * Math.PI) / 180);
   if (flipH) ctx.scale(-1, 1);
   if (flipV) ctx.scale(1, -1);
-  ctx.drawImage(
-    img,
-    croppedArea.x, croppedArea.y, srcW, srcH,
-    -outW / 2, -outH / 2, outW, outH
-  );
+
+  // Clamp source rect to actual image bounds to avoid drawing outside
+  const srcX = Math.max(0, croppedArea.x);
+  const srcY = Math.max(0, croppedArea.y);
+  const srcRight = Math.min(img.width, croppedArea.x + croppedArea.width);
+  const srcBottom = Math.min(img.height, croppedArea.y + croppedArea.height);
+  const srcW = srcRight - srcX;
+  const srcH = srcBottom - srcY;
+
+  // Map the clamped source region into its correct position within the output square
+  const scale = outSize / croppedArea.width;
+  const dstX = (srcX - croppedArea.x) * scale - outSize / 2;
+  const dstY = (srcY - croppedArea.y) * scale - outSize / 2;
+  const dstW = srcW * scale;
+  const dstH = srcH * scale;
+
+  if (srcW > 0 && srcH > 0) {
+    ctx.drawImage(img, srcX, srcY, srcW, srcH, dstX, dstY, dstW, dstH);
+  }
   ctx.restore();
 
   return new Promise((res) => canvas.toBlob((b) => res(b!), "image/jpeg", 0.9));
@@ -48,7 +62,7 @@ async function getCroppedBlob(
 
 export default function TileImageCropper({ imageSrc, onDone, onCancel }: Props) {
   const [crop, setCrop] = useState({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState(0.8);
   const [rotation, setRotation] = useState(0);
   const [flipH, setFlipH] = useState(false);
   const [flipV, setFlipV] = useState(false);
@@ -73,13 +87,16 @@ export default function TileImageCropper({ imageSrc, onDone, onCancel }: Props) 
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="relative w-full rounded-lg overflow-hidden bg-gray-950" style={{ height: 240 }}>
+      <div className="relative w-full rounded-lg overflow-hidden bg-gray-950" style={{ height: 360 }}>
         <Cropper
           image={imageSrc}
           crop={crop}
           zoom={zoom}
           rotation={rotation}
           aspect={1}
+          minZoom={0.2}
+          maxZoom={6}
+          restrictPosition={false}
           onCropChange={setCrop}
           onZoomChange={setZoom}
           onCropComplete={onCropComplete}
@@ -90,7 +107,7 @@ export default function TileImageCropper({ imageSrc, onDone, onCancel }: Props) 
       <div className="flex items-center gap-3">
         <span className="text-xs text-gray-400 w-12 shrink-0">Zoom</span>
         <input
-          type="range" min={1} max={3} step={0.05}
+          type="range" min={0.2} max={6} step={0.05}
           value={zoom}
           onChange={(e) => setZoom(Number(e.target.value))}
           className="flex-1 accent-amber-500"

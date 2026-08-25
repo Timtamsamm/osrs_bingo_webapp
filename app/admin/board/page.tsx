@@ -8,7 +8,6 @@ export default async function AdminBoardPage() {
     prisma.bingoBoard.findFirst({
       where: { active: true },
       include: { tiles: { orderBy: { position: "asc" } } },
-      // passcode is automatically included via include — no extra select needed
     }),
     prisma.bingoBoard.findFirst({
       where: { active: true },
@@ -26,19 +25,22 @@ export default async function AdminBoardPage() {
   const latestSnapshot = snapshotInfo?.snapshots[0] ?? null;
 
   return (
-    <div className="max-w-4xl flex flex-col gap-10">
+    <div className="flex flex-col gap-10">
       <div>
-        <h1 className="text-2xl font-bold mb-8">Board & Tiles</h1>
+        <h1 className="font-[family-name:var(--font-cinzel)] text-2xl font-bold mb-8 text-purple-100 heading-glow">
+          Board &amp; Tiles
+        </h1>
         <BoardEditor board={board ? {
           ...board,
+          rowColBonuses: (board.rowColBonuses ?? { t1: 0, t2: 0, t3: 0 }) as unknown as { t1: number; t2: number; t3: number },
           tiles: board.tiles.map((t) => ({
             ...t,
-            dinkItems: (t.dinkItems ?? []) as Array<{ id: number; name: string }>,
+            tiers: (t.tiers ?? []) as unknown as import("./BoardEditor").TierDef[] | null,
           })),
         } : null} />
       </div>
 
-      <div>
+      <div className="bg-[#0e0820] border border-purple-900/40 rounded-xl p-6">
         <SnapshotButton
           snapshotCount={snapshotInfo?._count.snapshots ?? 0}
           snapshotTakenAt={latestSnapshot?.takenAt.toISOString() ?? null}
@@ -46,7 +48,7 @@ export default async function AdminBoardPage() {
       </div>
 
       <div>
-        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Danger zone</h2>
+        <h2 className="text-sm font-semibold text-purple-600 uppercase tracking-wider mb-3">Danger zone</h2>
         <ResetBoardButton />
       </div>
     </div>
