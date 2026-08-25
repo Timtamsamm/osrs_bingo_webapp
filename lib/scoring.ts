@@ -27,8 +27,15 @@ export interface TeamStanding {
   completedTiles: number;
 }
 
-export const ROWS = Array.from({ length: 5 }, (_, r) => [r * 5, r * 5 + 1, r * 5 + 2, r * 5 + 3, r * 5 + 4]);
-export const COLS = Array.from({ length: 5 }, (_, c) => [c, c + 5, c + 10, c + 15, c + 20]);
+/** Row position groups for a `size` x `size` grid, e.g. size=3 → [[0,1,2],[3,4,5],[6,7,8]]. */
+export function getRows(size: number): number[][] {
+  return Array.from({ length: size }, (_, r) => Array.from({ length: size }, (_, c) => r * size + c));
+}
+
+/** Column position groups for a `size` x `size` grid, e.g. size=3 → [[0,3,6],[1,4,7],[2,5,8]]. */
+export function getCols(size: number): number[][] {
+  return Array.from({ length: size }, (_, c) => Array.from({ length: size }, (_, r) => r * size + c));
+}
 
 export function bonusPts(tier: number | null, cfg: BonusConfig): number {
   if (tier === null) return 0;
@@ -56,10 +63,16 @@ export function getLineBonusTier(tiles: TileForScoring[], positions: number[], t
 }
 
 export function computeStandings(
-  tiles: TileForScoring[],
+  allTiles: TileForScoring[],
   teams: TeamForScoring[],
-  bonusConfig: BonusConfig
+  bonusConfig: BonusConfig,
+  size: number
 ): { standings: TeamStanding[]; totalPoints: number; totalTiles: number } {
+  // Tiles left over from a larger board size are ignored, not deleted — see getRows/getCols.
+  const tiles = allTiles.filter((t) => t.position < size * size);
+  const rows = getRows(size);
+  const cols = getCols(size);
+
   const standings: TeamStanding[] = teams.map((team) => {
     let earnedPoints = 0;
     let completedTiles = 0;
@@ -76,15 +89,15 @@ export function computeStandings(
       }
     }
 
-    for (const row of ROWS) earnedPoints += bonusPts(getLineBonusTier(tiles, row, team.id), bonusConfig);
-    for (const col of COLS) earnedPoints += bonusPts(getLineBonusTier(tiles, col, team.id), bonusConfig);
+    for (const row of rows) earnedPoints += bonusPts(getLineBonusTier(tiles, row, team.id), bonusConfig);
+    for (const col of cols) earnedPoints += bonusPts(getLineBonusTier(tiles, col, team.id), bonusConfig);
 
     return { id: team.id, name: team.name, color: team.color, earnedPoints, completedTiles };
   }).sort((a, b) => b.earnedPoints - a.earnedPoints || a.name.localeCompare(b.name));
 
   const tilePts = tiles.reduce((sum, tile) => sum + tile.tiers.reduce((s, t) => s + t.points, 0), 0);
   const maxLineBonus = Math.max(bonusConfig.t1, bonusConfig.t2, bonusConfig.t3);
-  const totalPoints = tilePts + 10 * maxLineBonus;
+  const totalPoints = tilePts + rows.length * maxLineBonus + cols.length * maxLineBonus;
   const totalTiles = tiles.filter((t) => t.title.trim()).length;
 
   return { standings, totalPoints, totalTiles };

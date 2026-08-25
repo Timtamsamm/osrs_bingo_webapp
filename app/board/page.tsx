@@ -6,7 +6,7 @@ import BoardTabNav from "@/app/components/BoardTabNav";
 import Countdown from "@/app/components/Countdown";
 import BoardView from "./BoardView";
 import type { TileSummary, LineSummary, BonusConfig } from "./BoardView";
-import { computeStandings, getLineBonusTier, ROWS, COLS, type TierDef } from "@/lib/scoring";
+import { computeStandings, getLineBonusTier, getRows, getCols, type TierDef } from "@/lib/scoring";
 
 export default async function BoardPage() {
   const [board, teams] = await Promise.all([
@@ -27,6 +27,7 @@ export default async function BoardPage() {
     prisma.team.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, color: true } }),
   ]);
 
+  const size = board?.size ?? 5;
   const rawBonuses = board?.rowColBonuses as { t1?: number; t2?: number; t3?: number } | null;
   const bonusConfig: BonusConfig = {
     t1: rawBonuses?.t1 ?? 0,
@@ -34,18 +35,23 @@ export default async function BoardPage() {
     t3: rawBonuses?.t3 ?? 0,
   };
 
-  const scoringTiles = (board?.tiles ?? []).map((tile) => ({
-    id: tile.id,
-    position: tile.position,
-    title: tile.title,
-    tiers: (tile.tiers as TierDef[]) ?? [],
-    submissions: tile.submissions,
-  }));
+  // Tiles beyond the current grid size are left in the DB (from a previous
+  // larger size) but excluded from scoring and display — see lib/scoring.ts.
+  const scoringTiles = (board?.tiles ?? [])
+    .filter((tile) => tile.position < size * size)
+    .map((tile) => ({
+      id: tile.id,
+      position: tile.position,
+      title: tile.title,
+      tiers: (tile.tiers as TierDef[]) ?? [],
+      submissions: tile.submissions,
+    }));
 
-  const { standings: teamList, totalPoints, totalTiles } = computeStandings(scoringTiles, teams, bonusConfig);
+  const { standings: teamList, totalPoints, totalTiles } = computeStandings(scoringTiles, teams, bonusConfig, size);
+  const boardTileById = new Map((board?.tiles ?? []).map((t) => [t.id, t]));
 
-  const tiles: TileSummary[] = scoringTiles.map((tile, i) => {
-    const boardTile = board!.tiles[i];
+  const tiles: TileSummary[] = scoringTiles.map((tile) => {
+    const boardTile = boardTileById.get(tile.id)!;
     return {
       id: tile.id,
       position: tile.position,
@@ -69,7 +75,7 @@ export default async function BoardPage() {
   });
 
   // Line summaries for the board grid
-  const rowSummaries: LineSummary[] = ROWS.map((positions, i) => ({
+  const rowSummaries: LineSummary[] = getRows(size).map((positions, i) => ({
     index: i,
     statuses: teams.map((team) => ({
       teamId: team.id,
@@ -77,7 +83,7 @@ export default async function BoardPage() {
     })),
   }));
 
-  const colSummaries: LineSummary[] = COLS.map((positions, i) => ({
+  const colSummaries: LineSummary[] = getCols(size).map((positions, i) => ({
     index: i,
     statuses: teams.map((team) => ({
       teamId: team.id,
@@ -85,7 +91,7 @@ export default async function BoardPage() {
     })),
   }));
 
-  const boardIsEmpty = !board || board.tiles.every((t) => !t.title.trim());
+  const boardIsEmpty = !board || scoringTiles.every((t) => !t.title.trim());
 
   if (board?.startsAt && board.startsAt > new Date()) {
     return (
@@ -183,6 +189,7 @@ export default async function BoardPage() {
             rowSummaries={rowSummaries}
             colSummaries={colSummaries}
             bonusConfig={bonusConfig}
+            size={size}
           />
         )}
       </div>

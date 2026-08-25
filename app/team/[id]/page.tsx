@@ -7,10 +7,7 @@ import Image from "next/image";
 import { fetchTeamStats } from "@/lib/templeosrs";
 import TeamProgressChart from "./TeamProgressChart";
 import BoardTabNav from "@/app/components/BoardTabNav";
-import { computeStandings, bonusPts, ROWS, COLS, type TierDef, type BonusConfig } from "@/lib/scoring";
-
-const LINES = [...ROWS.map((p, i) => ({ key: `row-${i}`, label: `Row ${i + 1}`, positions: p })),
-  ...COLS.map((p, i) => ({ key: `col-${i}`, label: `Column ${i + 1}`, positions: p }))];
+import { computeStandings, bonusPts, getRows, getCols, type TierDef, type BonusConfig } from "@/lib/scoring";
 
 interface PointEvent {
   date: Date;
@@ -36,6 +33,7 @@ export default async function TeamPage({ params }: Props) {
         id: true,
         name: true,
         rowColBonuses: true,
+        size: true,
         tiles: {
           orderBy: { position: "asc" },
           select: {
@@ -64,10 +62,17 @@ export default async function TeamPage({ params }: Props) {
       })
     : [];
 
-  const tileById = new Map((board?.tiles ?? []).map((t) => [t.id, t]));
-  const tierDefsByTile = new Map((board?.tiles ?? []).map((t) => [t.id, (t.tiers as TierDef[]) ?? []]));
+  const size = board?.size ?? 5;
+  // Tiles beyond the current grid size are left in the DB but hidden from
+  // display/scoring — see lib/scoring.ts.
+  const inRangeTiles = (board?.tiles ?? []).filter((t) => t.position < size * size);
+  const tileById = new Map(inRangeTiles.map((t) => [t.id, t]));
+  const allTileTitleById = new Map((board?.tiles ?? []).map((t) => [t.id, t.title]));
+  const tierDefsByTile = new Map(inRangeTiles.map((t) => [t.id, (t.tiers as TierDef[]) ?? []]));
   const rawBonuses = board?.rowColBonuses as { t1?: number; t2?: number; t3?: number } | null;
   const bonusConfig: BonusConfig = { t1: rawBonuses?.t1 ?? 0, t2: rawBonuses?.t2 ?? 0, t3: rawBonuses?.t3 ?? 0 };
+  const LINES = [...getRows(size).map((p, i) => ({ key: `row-${i}`, label: `Row ${i + 1}`, positions: p })),
+    ...getCols(size).map((p, i) => ({ key: `col-${i}`, label: `Column ${i + 1}`, positions: p }))];
 
   const approved = submissions.filter((s) => s.status === "APPROVED");
 
@@ -142,17 +147,17 @@ export default async function TeamPage({ params }: Props) {
   }
 
   const completedTiles = [...achievedByTile.values()].filter((s) => s.has(1)).length;
-  const totalTiles = (board?.tiles ?? []).filter((t) => t.title.trim()).length;
+  const totalTiles = inRangeTiles.filter((t) => t.title.trim()).length;
 
   // Rank among all teams — same shared scoring rule the board page uses, so they always agree.
-  const scoringTiles = (board?.tiles ?? []).map((t) => ({
+  const scoringTiles = inRangeTiles.map((t) => ({
     id: t.id,
     position: t.position,
     title: t.title,
     tiers: (t.tiers as TierDef[]) ?? [],
     submissions: t.submissions,
   }));
-  const { standings } = computeStandings(scoringTiles, allTeams, bonusConfig);
+  const { standings } = computeStandings(scoringTiles, allTeams, bonusConfig, size);
   const rank = standings.findIndex((s) => s.id === team.id) + 1;
 
   const teamStats = await fetchTeamStats(team.participants.map((p) => p.rsn));
@@ -232,7 +237,7 @@ export default async function TeamPage({ params }: Props) {
         <div className="bg-[#0e0820] border border-purple-900/40 rounded-xl p-5">
           <p className="text-xs tracking-[0.2em] text-purple-400 uppercase font-semibold mb-4">Tile progress</p>
           <div className="flex flex-col gap-1.5">
-            {(board?.tiles ?? []).filter((t) => t.title.trim()).map((tile) => {
+            {inRangeTiles.filter((t) => t.title.trim()).map((tile) => {
               const tierDefs = (tile.tiers as TierDef[]) ?? [];
               const achieved = achievedByTile.get(tile.id) ?? new Set<number>();
               return (
@@ -269,7 +274,7 @@ export default async function TeamPage({ params }: Props) {
           ) : (
             <div className="flex flex-col gap-2">
               {[...submissions].reverse().map((s) => {
-                const tile = tileById.get(s.tileId);
+                const tileTitle = allTileTitleById.get(s.tileId) ?? "Tile";
                 return (
                   <div key={s.id} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-[#130a28]/60">
                     {s.imageUrl && (
@@ -279,7 +284,7 @@ export default async function TeamPage({ params }: Props) {
                     )}
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-purple-100 truncate">
-                        {tile?.title ?? "Tile"}{" "}
+                        {tileTitle}{" "}
                         {s.tier != null && <span className="text-purple-500">T{s.tier}</span>}
                         {s.dinkItemName && <span className="text-purple-500"> · {s.dinkItemName}</span>}
                       </p>

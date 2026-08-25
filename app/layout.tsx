@@ -15,6 +15,7 @@ const getLeadingTeamColor = unstable_cache(
         where: { active: true },
         select: {
           rowColBonuses: true,
+          size: true,
           tiles: {
             select: {
               id: true,
@@ -42,7 +43,7 @@ const getLeadingTeamColor = unstable_cache(
       submissions: t.submissions,
     }));
 
-    const { standings } = computeStandings(scoringTiles, teams, bonusConfig);
+    const { standings } = computeStandings(scoringTiles, teams, bonusConfig, board?.size ?? 5);
     const leader = standings[0];
     if (!leader || leader.earnedPoints <= 0) return "#c9aa71"; // OSRS gold — default when no team leads
     return leader.color;

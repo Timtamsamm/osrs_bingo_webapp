@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "BingoBoard" ADD COLUMN     "size" INTEGER NOT NULL DEFAULT 5;

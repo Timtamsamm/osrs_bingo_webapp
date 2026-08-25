@@ -52,6 +52,7 @@ interface Props {
   rowSummaries: LineSummary[];
   colSummaries: LineSummary[];
   bonusConfig: BonusConfig;
+  size: number;
 }
 
 function tileGlowClass(tile: TileSummary) {
@@ -168,7 +169,7 @@ function LineIndicator({
   );
 }
 
-export default function BoardView({ tiles, teams, rowSummaries, colSummaries, bonusConfig }: Props) {
+export default function BoardView({ tiles, teams, rowSummaries, colSummaries, bonusConfig, size }: Props) {
   const [view, setView] = useState<View>("grid");
 
   useEffect(() => {
@@ -188,6 +189,7 @@ export default function BoardView({ tiles, teams, rowSummaries, colSummaries, bo
 
   // Position map for grid rendering
   const tileByPos = new Map(tiles.map((t) => [t.position, t]));
+  const indices = Array.from({ length: size }, (_, i) => i);
 
   return (
     <div>
@@ -224,12 +226,12 @@ export default function BoardView({ tiles, teams, rowSummaries, colSummaries, bo
       {view === "grid" && (
         <div
           className="grid gap-3"
-          style={{ gridTemplateColumns: hasLineBonuses ? "repeat(5, 1fr) 2rem" : "repeat(5, 1fr)" }}
+          style={{ gridTemplateColumns: hasLineBonuses ? `repeat(${size}, 1fr) 2rem` : `repeat(${size}, 1fr)` }}
         >
-          {/* 5 rows of tiles */}
-          {[0, 1, 2, 3, 4].flatMap((rowIdx) => {
-            const tileCells = [0, 1, 2, 3, 4].map((colIdx) => {
-              const pos = rowIdx * 5 + colIdx;
+          {/* `size` rows of tiles */}
+          {indices.flatMap((rowIdx) => {
+            const tileCells = indices.map((colIdx) => {
+              const pos = rowIdx * size + colIdx;
               const tile = tileByPos.get(pos);
               if (!tile) {
                 return (
@@ -290,7 +292,7 @@ export default function BoardView({ tiles, teams, rowSummaries, colSummaries, bo
           {/* Column indicators */}
           {hasLineBonuses && (
             <>
-              {[0, 1, 2, 3, 4].map((colIdx) => (
+              {indices.map((colIdx) => (
                 <LineIndicator
                   key={`col-ind-${colIdx}`}
                   summary={colSummaries[colIdx]}

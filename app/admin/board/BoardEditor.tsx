@@ -30,8 +30,12 @@ interface Board {
   maxTeamSize: number;
   dinkToken: string | null;
   rowColBonuses: { t1: number; t2: number; t3: number } | null;
+  size: number;
   tiles: Tile[];
 }
+
+const BOARD_SIZES = [3, 4, 5] as const;
+const GRID_COLS_CLASS: Record<number, string> = { 3: "grid-cols-3", 4: "grid-cols-4", 5: "grid-cols-5" };
 
 function parseDinkItems(text: string): Array<{ id: number; name: string }> {
   return text
@@ -119,6 +123,7 @@ export default function BoardEditor({ board }: Props) {
   const [boardStartsAt, setBoardStartsAt] = useState(toDatetimeLocal(board?.startsAt ?? null));
   const [boardEndsAt, setBoardEndsAt] = useState(toDatetimeLocal(board?.endsAt ?? null));
   const [boardMaxTeamSize, setBoardMaxTeamSize] = useState(board?.maxTeamSize ?? 10);
+  const [boardSize, setBoardSize] = useState(board?.size ?? 5);
   const [boardDinkToken, setBoardDinkToken] = useState(board?.dinkToken ?? "");
   const [bonusT1, setBonusT1] = useState(board?.rowColBonuses?.t1 ?? 0);
   const [bonusT2, setBonusT2] = useState(board?.rowColBonuses?.t2 ?? 0);
@@ -186,10 +191,12 @@ export default function BoardEditor({ board }: Props) {
     setError("");
     try {
       const tilesPayload = Object.fromEntries(
-        Object.entries(tiles).map(([pos, t]) => [
-          pos,
-          { title: t.title, description: t.description, imageUrl: t.imageUrl, tiers: stateToTiers(t) },
-        ])
+        Object.entries(tiles)
+          .filter(([pos]) => Number(pos) < boardSize * boardSize)
+          .map(([pos, t]) => [
+            pos,
+            { title: t.title, description: t.description, imageUrl: t.imageUrl, tiers: stateToTiers(t) },
+          ])
       );
       const res = await fetch("/api/admin/board", {
         method: board ? "PUT" : "POST",
@@ -201,6 +208,7 @@ export default function BoardEditor({ board }: Props) {
           startsAt: boardStartsAt ? new Date(boardStartsAt).toISOString() : null,
           endsAt: boardEndsAt ? new Date(boardEndsAt).toISOString() : null,
           maxTeamSize: boardMaxTeamSize,
+          size: boardSize,
           dinkToken: boardDinkToken,
           rowColBonuses: { t1: bonusT1, t2: bonusT2, t3: bonusT3 },
           tiles: tilesPayload,
@@ -283,6 +291,29 @@ export default function BoardEditor({ board }: Props) {
           </div>
         </div>
 
+        <div className="flex flex-col gap-1.5 border-t border-purple-900/30 pt-4">
+          <label className={labelCls}>Board size</label>
+          <div className="flex gap-2">
+            {BOARD_SIZES.map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => { setBoardSize(n); setSelected(null); }}
+                className={`text-xs font-semibold rounded-lg px-3 py-2 border transition-colors ${
+                  boardSize === n
+                    ? "bg-purple-700/60 border-purple-500 text-white"
+                    : "bg-[#130a28] border-purple-900/50 text-purple-400 hover:border-purple-700/60"
+                }`}
+              >
+                {n}×{n}
+              </button>
+            ))}
+          </div>
+          <p className="text-[11px] text-purple-700/60">
+            Shrinking hides tiles outside the new grid (and their points) without deleting them — grow back and they reappear.
+          </p>
+        </div>
+
         <div className="flex gap-4 items-start">
           <div className="flex flex-col gap-1.5 w-32 shrink-0">
             <label className={labelCls}>Max team size</label>
@@ -306,11 +337,11 @@ export default function BoardEditor({ board }: Props) {
       </div>
 
       <div className="flex gap-6">
-        {/* 5×5 grid */}
+        {/* size×size grid */}
         <div className="flex flex-col gap-2">
           <p className="text-xs text-purple-500 mb-1">Click a tile to edit it</p>
-          <div className="grid grid-cols-5 gap-1.5">
-            {Array.from({ length: 25 }, (_, i) => {
+          <div className={`grid ${GRID_COLS_CLASS[boardSize]} gap-1.5`}>
+            {Array.from({ length: boardSize * boardSize }, (_, i) => {
               const t = tiles[i];
               const filled = t.title.trim().length > 0;
               const hasTiers = filled && stateToTiers(t).length > 0;

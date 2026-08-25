@@ -12,6 +12,7 @@ export default async function TeamsPage() {
       select: {
         name: true,
         rowColBonuses: true,
+        size: true,
         tiles: {
           orderBy: { position: "asc" },
           select: {
@@ -33,6 +34,7 @@ export default async function TeamsPage() {
     }),
   ]);
 
+  const size = board?.size ?? 5;
   const rawBonuses = board?.rowColBonuses as { t1?: number; t2?: number; t3?: number } | null;
   const bonusConfig: BonusConfig = { t1: rawBonuses?.t1 ?? 0, t2: rawBonuses?.t2 ?? 0, t3: rawBonuses?.t3 ?? 0 };
 
@@ -44,7 +46,7 @@ export default async function TeamsPage() {
     submissions: t.submissions,
   }));
 
-  const { standings, totalPoints, totalTiles } = computeStandings(scoringTiles, teams, bonusConfig);
+  const { standings, totalPoints, totalTiles } = computeStandings(scoringTiles, teams, bonusConfig, size);
   const memberCountById = new Map(teams.map((t) => [t.id, t._count.participants]));
   const medals = ["🥇", "🥈", "🥉"];
 

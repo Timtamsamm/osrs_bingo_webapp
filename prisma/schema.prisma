@@ -98,6 +98,7 @@ model BingoBoard {
   passcode    String?           // optional event passcode — players must enter this once after login
   dinkToken     String?           // token players put in Dink's webhook URL (?token=xxx)
   rowColBonuses Json              @default("{}")  // { t1: number, t2: number, t3: number }
+  size          Int               @default(5)     // grid is size x size (3, 4, or 5)
   createdAt     DateTime          @default(now())
   tiles         BingoTile[]
 }
