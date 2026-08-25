@@ -94,7 +94,6 @@ model BingoBoard {
   active      Boolean           @default(true)
   startsAt    DateTime?
   endsAt      DateTime?
-  maxTeamSize Int               @default(10)
   passcode    String?           // optional event passcode — players must enter this once after login
   dinkToken     String?           // token players put in Dink's webhook URL (?token=xxx)
   rowColBonuses Json              @default("{}")  // { t1: number, t2: number, t3: number }

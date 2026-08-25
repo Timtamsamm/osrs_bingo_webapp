@@ -27,7 +27,6 @@ interface Board {
   description: string | null;
   startsAt: Date | null;
   endsAt: Date | null;
-  maxTeamSize: number;
   dinkToken: string | null;
   rowColBonuses: { t1: number; t2: number; t3: number } | null;
   size: number;
@@ -122,7 +121,6 @@ export default function BoardEditor({ board }: Props) {
   const [boardDesc, setBoardDesc] = useState(board?.description ?? "");
   const [boardStartsAt, setBoardStartsAt] = useState(toDatetimeLocal(board?.startsAt ?? null));
   const [boardEndsAt, setBoardEndsAt] = useState(toDatetimeLocal(board?.endsAt ?? null));
-  const [boardMaxTeamSize, setBoardMaxTeamSize] = useState(board?.maxTeamSize ?? 10);
   const [boardSize, setBoardSize] = useState(board?.size ?? 5);
   const [boardDinkToken, setBoardDinkToken] = useState(board?.dinkToken ?? "");
   const [bonusT1, setBonusT1] = useState(board?.rowColBonuses?.t1 ?? 0);
@@ -207,7 +205,6 @@ export default function BoardEditor({ board }: Props) {
           description: boardDesc,
           startsAt: boardStartsAt ? new Date(boardStartsAt).toISOString() : null,
           endsAt: boardEndsAt ? new Date(boardEndsAt).toISOString() : null,
-          maxTeamSize: boardMaxTeamSize,
           size: boardSize,
           dinkToken: boardDinkToken,
           rowColBonuses: { t1: bonusT1, t2: bonusT2, t3: bonusT3 },
@@ -315,10 +312,6 @@ export default function BoardEditor({ board }: Props) {
         </div>
 
         <div className="flex gap-4 items-start">
-          <div className="flex flex-col gap-1.5 w-32 shrink-0">
-            <label className={labelCls}>Max team size</label>
-            <input type="number" min={1} max={20} value={boardMaxTeamSize} onChange={(e) => setBoardMaxTeamSize(Number(e.target.value))} className={inputCls} />
-          </div>
           <div className="flex flex-col gap-1.5 flex-1">
             <label className={labelCls}>Event start (optional)</label>
             <div className="flex gap-2">
