@@ -409,12 +409,12 @@ export default function BoardEditor({ board }: Props) {
                       </div>
                       <div className="flex flex-col gap-1">
                         <label className={labelCls}>Description (optional)</label>
-                        <input
-                          type="text"
+                        <textarea
                           value={ts.description}
                           onChange={(e) => updateTier(selected, tierKey, "description", e.target.value)}
+                          rows={2}
                           placeholder="What specifically this tier requires"
-                          className={inputCls}
+                          className={`${inputCls} resize-y`}
                         />
                       </div>
                       <div className="flex gap-3 items-start">

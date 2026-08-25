@@ -246,7 +246,7 @@ function TileDetailModal({ tile, teams, onClose }: { tile: TileSummary; teams: T
                       <span className="text-xs text-purple-500 ml-2">{td.requiredCount}× required</span>
                     </div>
                   </div>
-                  {td.description && <p className="text-xs text-purple-400/80">{td.description}</p>}
+                  {td.description && <p className="text-xs text-purple-400/80 whitespace-pre-line">{td.description}</p>}
                 </div>
               ))
             )}
