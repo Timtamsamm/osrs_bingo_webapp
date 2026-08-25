@@ -106,15 +106,26 @@ export async function POST(req: NextRequest) {
 
   if (droppedItems.length === 0) return NextResponse.json({ status: "no_match" });
 
-  // Build item ID → {tileId, tileTitle, tierDef} map across all tiles and tiers
-  const itemTierMap = new Map<number, { tileId: string; tileTitle: string; tierDef: TierDef }>();
+  // Map each item ID to the tile it belongs to, and every tier on that tile
+  // whose item list includes it. Usually that's a single tier (each tier has
+  // its own distinct items — e.g. T1 = rare drop, T3 = common drop). If the
+  // *same* item is listed under more than one tier on a tile, that tile is
+  // treated as a shared pool (e.g. "Any 3 pets" with the same pet IDs in
+  // every tier box) — see the branch below.
+  const itemToTile = new Map<number, { tileId: string; tileTitle: string; tierDefs: TierDef[] }>();
   for (const tile of board.tiles) {
     const tiers = (tile.tiers as TierDef[]) ?? [];
+    const tiersByItem = new Map<number, TierDef[]>();
     for (const tierDef of tiers) {
       for (const entry of tierDef.dinkItems) {
-        if (!itemTierMap.has(entry.id)) {
-          itemTierMap.set(entry.id, { tileId: tile.id, tileTitle: tile.title, tierDef });
-        }
+        const arr = tiersByItem.get(entry.id) ?? [];
+        arr.push(tierDef);
+        tiersByItem.set(entry.id, arr);
+      }
+    }
+    for (const [itemId, tierDefs] of tiersByItem) {
+      if (!itemToTile.has(itemId)) {
+        itemToTile.set(itemId, { tileId: tile.id, tileTitle: tile.title, tierDefs });
       }
     }
   }
@@ -129,45 +140,63 @@ export async function POST(req: NextRequest) {
     imageUrl = url;
   }
 
+  // Require a screenshot to auto-approve — a JSON-only payload (no image) is
+  // far easier to forge than a real Dink client submission, so those fall to
+  // manual review instead of silently counting.
+  const verified = imageUrl !== null;
+  const teamId = matchedParticipant.teamId;
+
   const matched: string[] = [];
 
   for (const item of droppedItems) {
-    const match = itemTierMap.get(item.id);
+    const match = itemToTile.get(item.id);
     if (!match) continue;
-    const { tileId, tileTitle, tierDef } = match;
+    const { tileId, tileTitle, tierDefs } = match;
 
-    // Skip if this exact item was already claimed for this tier (per team)
-    const alreadyClaimed = await prisma.submission.findFirst({
-      where: {
-        teamId: matchedParticipant.teamId,
-        tileId,
-        tier: tierDef.tier,
-        dinkItemId: item.id,
-        status: { not: "REJECTED" },
-      },
-      select: { id: true },
-    });
-    if (alreadyClaimed) continue;
+    let targetTier: TierDef;
 
-    // Skip if this tier is already full for this team
-    const activeCount = await prisma.submission.count({
-      where: {
-        teamId: matchedParticipant.teamId,
-        tileId,
-        tier: tierDef.tier,
-        status: { not: "REJECTED" },
-      },
-    });
-    if (activeCount >= tierDef.requiredCount) continue;
+    if (tierDefs.length === 1) {
+      // Normal case: this item only belongs to one tier on this tile.
+      const tierDef = tierDefs[0];
 
-    // Require a screenshot to auto-approve — a JSON-only payload (no image)
-    // is far easier to forge than a real Dink client submission, so those
-    // fall to manual review instead of silently counting.
-    const verified = imageUrl !== null;
+      const alreadyClaimed = await prisma.submission.findFirst({
+        where: { teamId, tileId, tier: tierDef.tier, dinkItemId: item.id, status: { not: "REJECTED" } },
+        select: { id: true },
+      });
+      if (alreadyClaimed) continue;
+
+      const activeCount = await prisma.submission.count({
+        where: { teamId, tileId, tier: tierDef.tier, status: { not: "REJECTED" } },
+      });
+      if (activeCount >= tierDef.requiredCount) continue;
+
+      targetTier = tierDef;
+    } else {
+      // Shared-pool case: the same item(s) are listed under multiple tiers
+      // (e.g. "Any 3 pets" with identical pet IDs in every tier box). The
+      // running count of distinct qualifying drops decides which tier this
+      // one lands on. Requires each tier's requiredCount to be sequential
+      // (1, 2, 3, ...) — a gap means a count can never land on it.
+      const tierNums = tierDefs.map((t) => t.tier);
+
+      const alreadyClaimed = await prisma.submission.findFirst({
+        where: { teamId, tileId, tier: { in: tierNums }, dinkItemId: item.id, status: { not: "REJECTED" } },
+        select: { id: true },
+      });
+      if (alreadyClaimed) continue;
+
+      const currentCount = await prisma.submission.count({
+        where: { teamId, tileId, tier: { in: tierNums }, status: { not: "REJECTED" } },
+      });
+      const next = tierDefs.find((t) => t.requiredCount === currentCount + 1);
+      if (!next) continue;
+
+      targetTier = next;
+    }
 
     await prisma.submission.create({
       data: {
-        teamId: matchedParticipant.teamId,
+        teamId,
         tileId,
         imageUrl,
         status: verified ? "APPROVED" : "PENDING",
@@ -176,11 +205,11 @@ export async function POST(req: NextRequest) {
         dinkItemId: item.id,
         dinkItemName: item.name,
         teamMember: playerName,
-        tier: tierDef.tier,
+        tier: targetTier.tier,
       },
     });
 
-    matched.push(`${tileTitle} (T${tierDef.tier})`);
+    matched.push(`${tileTitle} (T${targetTier.tier})`);
   }
 
   return NextResponse.json({
