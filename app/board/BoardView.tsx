@@ -173,6 +173,9 @@ export default function BoardView({ tiles, teams, rowSummaries, colSummaries, bo
 
   useEffect(() => {
     const saved = localStorage.getItem("boardView") as View | null;
+    // localStorage isn't available during SSR, so the saved preference can only
+    // be restored after mount — this one-time sync is the exception to the rule.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (saved === "grid" || saved === "list") setView(saved);
   }, []);
 

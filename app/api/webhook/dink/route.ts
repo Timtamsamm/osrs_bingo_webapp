@@ -160,13 +160,18 @@ export async function POST(req: NextRequest) {
     });
     if (activeCount >= tierDef.requiredCount) continue;
 
+    // Require a screenshot to auto-approve — a JSON-only payload (no image)
+    // is far easier to forge than a real Dink client submission, so those
+    // fall to manual review instead of silently counting.
+    const verified = imageUrl !== null;
+
     await prisma.submission.create({
       data: {
         teamId: matchedParticipant.teamId,
         tileId,
         imageUrl,
-        status: "APPROVED",
-        reviewedAt: now,
+        status: verified ? "APPROVED" : "PENDING",
+        reviewedAt: verified ? now : null,
         source: "dink",
         dinkItemId: item.id,
         dinkItemName: item.name,

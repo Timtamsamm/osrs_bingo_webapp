@@ -107,7 +107,10 @@ export default function SubmissionReviewer({ submission: s }: { submission: Subm
           </button>
         ) : (
           <div className="w-64 h-36 shrink-0 rounded-lg bg-[#130a28] border border-purple-900/40 flex items-center justify-center">
-            <p className="text-xs text-purple-700/60 text-center px-4">No screenshot<br />(Dink auto-claim)</p>
+            <p className="text-xs text-purple-700/60 text-center px-4">
+              No screenshot<br />
+              {isDink ? "(needs manual review)" : "(manual submission)"}
+            </p>
           </div>
         )}
 
