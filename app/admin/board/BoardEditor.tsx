@@ -375,7 +375,7 @@ export default function BoardEditor({ board }: Props) {
 
               <div className="flex flex-col gap-1.5">
                 <label className={labelCls}>Description (optional)</label>
-                <textarea value={selectedTile!.description} onChange={(e) => updateTile(selected, "description", e.target.value)} rows={2} placeholder="Any extra instructions" className={`${inputCls} resize-none`} />
+                <textarea value={selectedTile!.description} onChange={(e) => updateTile(selected, "description", e.target.value)} rows={3} placeholder="Any extra instructions" className={`${inputCls} resize-y`} />
               </div>
 
               {/* Tier sections */}
@@ -405,7 +405,7 @@ export default function BoardEditor({ board }: Props) {
                           </span>
                         )}
                       </div>
-                      <div className="flex gap-3">
+                      <div className="flex gap-3 items-start">
                         <div className="flex flex-col gap-1 w-24 shrink-0">
                           <label className={labelCls}>Points</label>
                           <input
@@ -432,9 +432,9 @@ export default function BoardEditor({ board }: Props) {
                           <textarea
                             value={ts.dinkItemsText}
                             onChange={(e) => updateTier(selected, tierKey, "dinkItemsText", e.target.value)}
-                            rows={2}
+                            rows={6}
                             placeholder={"4151 Abyssal whip\n12073 Twisted bow"}
-                            className={`${inputCls} font-mono resize-none text-xs`}
+                            className={`${inputCls} font-mono resize-y text-xs`}
                           />
                         </div>
                       </div>
