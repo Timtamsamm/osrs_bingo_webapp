@@ -5,12 +5,8 @@ import Link from "next/link";
 import BoardTabNav from "@/app/components/BoardTabNav";
 import Countdown from "@/app/components/Countdown";
 import BoardView from "./BoardView";
-import type { TileSummary, TeamInfo, LineSummary, BonusConfig } from "./BoardView";
-
-type TierDef = { tier: number; points: number; requiredCount: number; dinkItems: Array<{ id: number; name: string }> };
-
-const ROWS = Array.from({ length: 5 }, (_, r) => [r*5, r*5+1, r*5+2, r*5+3, r*5+4]);
-const COLS = Array.from({ length: 5 }, (_, c) => [c, c+5, c+10, c+15, c+20]);
+import type { TileSummary, LineSummary, BonusConfig } from "./BoardView";
+import { computeStandings, getLineBonusTier, ROWS, COLS, type TierDef } from "@/lib/scoring";
 
 export default async function BoardPage() {
   const [board, teams] = await Promise.all([
@@ -38,85 +34,28 @@ export default async function BoardPage() {
     t3: rawBonuses?.t3 ?? 0,
   };
 
-  // Index tiles by position for line calculations
-  const tileByPos = new Map((board?.tiles ?? []).map((t) => [t.position, t]));
+  const scoringTiles = (board?.tiles ?? []).map((tile) => ({
+    id: tile.id,
+    position: tile.position,
+    title: tile.title,
+    tiers: (tile.tiers as TierDef[]) ?? [],
+    submissions: tile.submissions,
+  }));
 
-  // For a set of positions, return the bonus tier earned by a team (null = line not complete)
-  function getBonusTierForLine(positions: number[], teamId: string): number | null {
-    const tilesInLine = positions.map((p) => tileByPos.get(p));
-    // Any position missing or having no tiers defined means the line can't be completed
-    if (tilesInLine.some((t) => !t || ((t.tiers as TierDef[]) ?? []).length === 0)) return null;
+  const { standings: teamList, totalPoints, totalTiles } = computeStandings(scoringTiles, teams, bonusConfig);
 
-    const bestPerTile: (number | null)[] = tilesInLine.map((tile) => {
-      const tierDefs = (tile!.tiers as TierDef[]) ?? [];
-      const teamSubs = tile!.submissions.filter((s) => s.teamId === teamId);
-      const achieved = tierDefs
-        .filter((td) => teamSubs.filter((s) => s.tier === td.tier && s.status === "APPROVED").length >= td.requiredCount)
-        .map((td) => td.tier);
-      return achieved.length > 0 ? Math.min(...achieved) : null; // lowest number = best tier
-    });
-
-    if (bestPerTile.some((b) => b === null)) return null; // at least one tile not done
-
-    return Math.max(...(bestPerTile as number[])); // highest number among bests = weakest tier
-  }
-
-  function bonusPts(tier: number | null): number {
-    if (tier === null) return 0;
-    if (tier === 1) return bonusConfig.t1;
-    if (tier === 2) return bonusConfig.t2;
-    return bonusConfig.t3;
-  }
-
-  const teamInfoMap = new Map<string, TeamInfo>();
-  teams.forEach((team) => {
-    let earnedPoints = 0;
-    let completedTiles = 0;
-
-    for (const tile of board?.tiles ?? []) {
-      const teamSubs = tile.submissions.filter((s) => s.teamId === team.id);
-      const tiers = (tile.tiers as TierDef[]) ?? [];
-      for (const tierDef of tiers) {
-        const approvedForTier = teamSubs.filter((s) => s.tier === tierDef.tier && s.status === "APPROVED").length;
-        if (approvedForTier >= tierDef.requiredCount) earnedPoints += tierDef.points;
-      }
-      const t1 = tiers.find((t) => t.tier === 1);
-      if (t1 && teamSubs.filter((s) => s.tier === 1 && s.status === "APPROVED").length >= t1.requiredCount) {
-        completedTiles++;
-      }
-    }
-
-    // Row and column bonuses
-    for (const row of ROWS) earnedPoints += bonusPts(getBonusTierForLine(row, team.id));
-    for (const col of COLS) earnedPoints += bonusPts(getBonusTierForLine(col, team.id));
-
-    teamInfoMap.set(team.id, { id: team.id, name: team.name, color: team.color, earnedPoints, completedTiles });
-  });
-
-  const teamList: TeamInfo[] = [...teamInfoMap.values()].sort(
-    (a, b) => b.earnedPoints - a.earnedPoints || a.name.localeCompare(b.name)
-  );
-
-  const tilePts = board?.tiles.reduce((sum, tile) => {
-    return sum + ((tile.tiers as TierDef[]) ?? []).reduce((s, t) => s + t.points, 0);
-  }, 0) ?? 0;
-  const maxLineBonus = Math.max(bonusConfig.t1, bonusConfig.t2, bonusConfig.t3);
-  const totalPoints = tilePts + 10 * maxLineBonus;
-
-  const totalTiles = board?.tiles.filter((t) => t.title.trim()).length ?? 0;
-
-  const tiles: TileSummary[] = (board?.tiles ?? []).map((tile) => {
-    const tierDefs = (tile.tiers as TierDef[]) ?? [];
+  const tiles: TileSummary[] = scoringTiles.map((tile, i) => {
+    const boardTile = board!.tiles[i];
     return {
       id: tile.id,
       position: tile.position,
       title: tile.title,
-      description: tile.description,
-      points: tierDefs.reduce((sum, t) => sum + t.points, 0),
-      imageUrl: tile.imageUrl,
+      description: boardTile.description,
+      points: tile.tiers.reduce((sum, t) => sum + t.points, 0),
+      imageUrl: boardTile.imageUrl,
       teamStatuses: teams.map((team) => {
         const teamSubs = tile.submissions.filter((s) => s.teamId === team.id);
-        const achievedTiers = tierDefs
+        const achievedTiers = tile.tiers
           .filter((td) => teamSubs.filter((s) => s.tier === td.tier && s.status === "APPROVED").length >= td.requiredCount)
           .map((td) => td.tier);
         return {
@@ -134,7 +73,7 @@ export default async function BoardPage() {
     index: i,
     statuses: teams.map((team) => ({
       teamId: team.id,
-      bonusTier: getBonusTierForLine(positions, team.id),
+      bonusTier: getLineBonusTier(scoringTiles, positions, team.id),
     })),
   }));
 
@@ -142,7 +81,7 @@ export default async function BoardPage() {
     index: i,
     statuses: teams.map((team) => ({
       teamId: team.id,
-      bonusTier: getBonusTierForLine(positions, team.id),
+      bonusTier: getLineBonusTier(scoringTiles, positions, team.id),
     })),
   }));
 
@@ -193,7 +132,7 @@ export default async function BoardPage() {
         </div>
 
         {/* Team standings */}
-        {teamList.length > 0 && totalPoints > 0 && (
+        {teamList.length > 0 && (
           <div className="mb-8 border border-purple-900/40 rounded-2xl overflow-hidden purple-glow-sm">
             <div className="px-5 py-3 border-b border-purple-900/30 bg-surface/40">
               <p className="text-xs tracking-[0.2em] text-purple-400 uppercase font-semibold">Standings</p>
@@ -207,7 +146,7 @@ export default async function BoardPage() {
                       {medals[i] ?? <span className="text-purple-700 text-sm">{i + 1}</span>}
                     </span>
                     <span className="w-2.5 h-2.5 rounded-full shrink-0 ring-1 ring-white/10" style={{ background: team.color, boxShadow: `0 0 6px ${team.color}80` }} />
-                    <span className="text-sm font-semibold text-white flex-1 truncate">{team.name}</span>
+                    <Link href={`/team/${team.id}`} className="text-sm font-semibold text-white flex-1 truncate hover:underline">{team.name}</Link>
                     <div className="hidden sm:flex items-center gap-2 w-36">
                       <div className="flex-1 h-1.5 bg-purple-950/60 rounded-full overflow-hidden">
                         <div className="h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(pct, 100)}%`, background: team.color, boxShadow: `0 0 4px ${team.color}` }} />

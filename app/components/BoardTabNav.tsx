@@ -10,6 +10,7 @@ export default function BoardTabNav() {
     <div className="flex justify-center mb-6">
       <div className="flex bg-surface/80 border border-purple-900/40 rounded-xl p-1 gap-1">
         <TabLink href="/board" active={pathname === "/board"}>Board</TabLink>
+        <TabLink href="/teams" active={pathname === "/teams" || pathname.startsWith("/team/")}>Teams</TabLink>
         <TabLink href="/players" active={pathname === "/players"}>Players</TabLink>
       </div>
     </div>

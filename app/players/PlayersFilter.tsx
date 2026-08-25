@@ -1,14 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import PlayerCard from "./PlayerCard";
-import type { BossKCs } from "@/lib/temple";
+import type { TempleStats } from "@/lib/templeosrs";
 
 export type PlayerEntry = {
   memberName: string;
+  teamId: string;
   teamName: string;
-  snapshot: BossKCs | null;
-  ehb: number | null;
+  temple: TempleStats | null;
 };
 
 interface Props {
@@ -23,7 +24,7 @@ export default function PlayersFilter({ players, teams, bosses }: Props) {
 
   const filtered = players.filter((p) => {
     if (teamFilter && p.teamName !== teamFilter) return false;
-    if (bossFilter && (!p.snapshot || !p.snapshot[bossFilter])) return false;
+    if (bossFilter && !p.temple?.bosses[bossFilter]?.kc) return false;
     return true;
   });
 
@@ -78,10 +79,12 @@ export default function PlayersFilter({ players, teams, bosses }: Props) {
         <p className="text-purple-500/60 text-sm">No players match the current filters.</p>
       ) : (
         <div className="flex flex-col gap-2">
-          {filtered.map(({ memberName, teamName, snapshot, ehb }) => (
+          {filtered.map(({ memberName, teamId, teamName, temple }) => (
             <div key={memberName}>
-              <p className="text-xs text-purple-700/70 mb-1 px-1">{teamName}</p>
-              <PlayerCard memberName={memberName} snapshot={snapshot} ehb={ehb} />
+              <Link href={`/team/${teamId}`} className="text-xs text-purple-700/70 mb-1 px-1 inline-block hover:text-purple-400 hover:underline transition-colors">
+                {teamName}
+              </Link>
+              <PlayerCard memberName={memberName} temple={temple} />
             </div>
           ))}
         </div>

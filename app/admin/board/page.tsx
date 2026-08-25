@@ -1,28 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import BoardEditor from "./BoardEditor";
 import ResetBoardButton from "./ResetBoardButton";
-import SnapshotButton from "./SnapshotButton";
 
 export default async function AdminBoardPage() {
-  const [board, snapshotInfo] = await Promise.all([
-    prisma.bingoBoard.findFirst({
-      where: { active: true },
-      include: { tiles: { orderBy: { position: "asc" } } },
-    }),
-    prisma.bingoBoard.findFirst({
-      where: { active: true },
-      select: {
-        snapshots: {
-          select: { takenAt: true },
-          orderBy: { takenAt: "desc" },
-          take: 1,
-        },
-        _count: { select: { snapshots: true } },
-      },
-    }),
-  ]);
-
-  const latestSnapshot = snapshotInfo?.snapshots[0] ?? null;
+  const board = await prisma.bingoBoard.findFirst({
+    where: { active: true },
+    include: { tiles: { orderBy: { position: "asc" } } },
+  });
 
   return (
     <div className="flex flex-col gap-10">
@@ -38,13 +22,6 @@ export default async function AdminBoardPage() {
             tiers: (t.tiers ?? []) as unknown as import("./BoardEditor").TierDef[] | null,
           })),
         } : null} />
-      </div>
-
-      <div className="bg-[#0e0820] border border-purple-900/40 rounded-xl p-6">
-        <SnapshotButton
-          snapshotCount={snapshotInfo?._count.snapshots ?? 0}
-          snapshotTakenAt={latestSnapshot?.takenAt.toISOString() ?? null}
-        />
       </div>
 
       <div>

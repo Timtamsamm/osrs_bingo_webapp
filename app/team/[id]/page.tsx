@@ -1,0 +1,312 @@
+export const dynamic = "force-dynamic";
+
+import { prisma } from "@/lib/prisma";
+import { notFound } from "next/navigation";
+import Link from "next/link";
+import Image from "next/image";
+import { fetchTeamStats } from "@/lib/templeosrs";
+import TeamProgressChart from "./TeamProgressChart";
+import BoardTabNav from "@/app/components/BoardTabNav";
+import { computeStandings, bonusPts, ROWS, COLS, type TierDef, type BonusConfig } from "@/lib/scoring";
+
+const LINES = [...ROWS.map((p, i) => ({ key: `row-${i}`, label: `Row ${i + 1}`, positions: p })),
+  ...COLS.map((p, i) => ({ key: `col-${i}`, label: `Column ${i + 1}`, positions: p }))];
+
+interface PointEvent {
+  date: Date;
+  delta: number;
+  label: string;
+}
+
+interface Props {
+  params: Promise<{ id: string }>;
+}
+
+export default async function TeamPage({ params }: Props) {
+  const { id } = await params;
+
+  const [team, board, allTeams] = await Promise.all([
+    prisma.team.findUnique({
+      where: { id },
+      select: { id: true, name: true, color: true, participants: { select: { rsn: true }, orderBy: { rsn: "asc" } } },
+    }),
+    prisma.bingoBoard.findFirst({
+      where: { active: true },
+      select: {
+        id: true,
+        name: true,
+        rowColBonuses: true,
+        tiles: {
+          orderBy: { position: "asc" },
+          select: {
+            id: true,
+            position: true,
+            title: true,
+            tiers: true,
+            submissions: {
+              where: { status: { not: "REJECTED" }, teamId: { not: null } },
+              select: { teamId: true, status: true, tier: true },
+            },
+          },
+        },
+      },
+    }),
+    prisma.team.findMany({ select: { id: true, name: true, color: true } }),
+  ]);
+
+  if (!team) notFound();
+
+  const submissions = board
+    ? await prisma.submission.findMany({
+        where: { teamId: team.id, tile: { boardId: board.id } },
+        select: { id: true, tileId: true, tier: true, status: true, source: true, teamMember: true, dinkItemName: true, imageUrl: true, note: true, createdAt: true },
+        orderBy: { createdAt: "asc" },
+      })
+    : [];
+
+  const tileById = new Map((board?.tiles ?? []).map((t) => [t.id, t]));
+  const tierDefsByTile = new Map((board?.tiles ?? []).map((t) => [t.id, (t.tiers as TierDef[]) ?? []]));
+  const rawBonuses = board?.rowColBonuses as { t1?: number; t2?: number; t3?: number } | null;
+  const bonusConfig: BonusConfig = { t1: rawBonuses?.t1 ?? 0, t2: rawBonuses?.t2 ?? 0, t3: rawBonuses?.t3 ?? 0 };
+
+  const approved = submissions.filter((s) => s.status === "APPROVED");
+
+  // Replay approved submissions chronologically to build a points-over-time timeline.
+  const countByTileTier = new Map<string, number>();
+  const achievedByTile = new Map<string, Set<number>>();
+  const lineBonusTier = new Map<string, number | null>();
+  for (const l of LINES) lineBonusTier.set(l.key, null);
+
+  function bestTierForTile(tileId: string): number | null {
+    const s = achievedByTile.get(tileId);
+    if (!s || s.size === 0) return null;
+    return Math.min(...s);
+  }
+
+  function computeLineTier(positions: number[]): number | null {
+    const best = positions.map((p) => {
+      const tile = [...tileById.values()].find((t) => t.position === p);
+      if (!tile) return null;
+      if ((tierDefsByTile.get(tile.id) ?? []).length === 0) return null;
+      return bestTierForTile(tile.id);
+    });
+    if (best.some((b) => b === null)) return null;
+    return Math.max(...(best as number[]));
+  }
+
+  const events: PointEvent[] = [];
+  let runningTotal = 0;
+
+  for (const sub of approved) {
+    if (sub.tier === null) continue;
+    const tierDefs = tierDefsByTile.get(sub.tileId) ?? [];
+    const tierDef = tierDefs.find((t) => t.tier === sub.tier);
+    if (!tierDef) continue;
+
+    const key = `${sub.tileId}:${sub.tier}`;
+    const newCount = (countByTileTier.get(key) ?? 0) + 1;
+    countByTileTier.set(key, newCount);
+    if (newCount !== tierDef.requiredCount) continue;
+
+    const tile = tileById.get(sub.tileId);
+    runningTotal += tierDef.points;
+    events.push({ date: sub.createdAt, delta: tierDef.points, label: `${tile?.title ?? "Tile"} (T${sub.tier})` });
+
+    const set = achievedByTile.get(sub.tileId) ?? new Set<number>();
+    set.add(sub.tier);
+    achievedByTile.set(sub.tileId, set);
+
+    if (!tile) continue;
+    for (const line of LINES) {
+      if (!line.positions.includes(tile.position)) continue;
+      const newTier = computeLineTier(line.positions);
+      const oldTier = lineBonusTier.get(line.key) ?? null;
+      if (newTier === oldTier) continue;
+      const delta = bonusPts(newTier, bonusConfig) - bonusPts(oldTier, bonusConfig);
+      if (delta !== 0) {
+        runningTotal += delta;
+        events.push({ date: sub.createdAt, delta, label: `${line.label} bonus` });
+      }
+      lineBonusTier.set(line.key, newTier);
+    }
+  }
+
+  const chartPoints: { date: string; cumulative: number }[] = [];
+  let running = 0;
+  if (events.length > 0) {
+    chartPoints.push({ date: events[0].date.toISOString(), cumulative: 0 });
+    for (const e of events) {
+      running += e.delta;
+      chartPoints.push({ date: e.date.toISOString(), cumulative: running });
+    }
+  }
+
+  const completedTiles = [...achievedByTile.values()].filter((s) => s.has(1)).length;
+  const totalTiles = (board?.tiles ?? []).filter((t) => t.title.trim()).length;
+
+  // Rank among all teams — same shared scoring rule the board page uses, so they always agree.
+  const scoringTiles = (board?.tiles ?? []).map((t) => ({
+    id: t.id,
+    position: t.position,
+    title: t.title,
+    tiers: (t.tiers as TierDef[]) ?? [],
+    submissions: t.submissions,
+  }));
+  const { standings } = computeStandings(scoringTiles, allTeams, bonusConfig);
+  const rank = standings.findIndex((s) => s.id === team.id) + 1;
+
+  const teamStats = await fetchTeamStats(team.participants.map((p) => p.rsn));
+  const topBosses = Object.entries(teamStats.bosses).sort((a, b) => b[1] - a[1]).slice(0, 12);
+
+  return (
+    <div className="min-h-screen bg-base text-white">
+      <div className="max-w-4xl mx-auto px-4 py-8 flex flex-col gap-8">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="w-4 h-4 rounded-full shrink-0 ring-1 ring-white/10" style={{ background: team.color, boxShadow: `0 0 8px ${team.color}80` }} />
+            <div>
+              <p className="text-xs tracking-[0.2em] text-purple-500 uppercase">{board?.name ?? "Bingo Event"}</p>
+              <h1 className="font-[family-name:var(--font-cinzel)] text-3xl font-black text-white heading-glow">{team.name}</h1>
+            </div>
+          </div>
+          <Link href="/teams" className="text-xs text-purple-500 hover:text-purple-300 transition-colors font-medium">← Back to teams</Link>
+        </div>
+
+        <BoardTabNav />
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <StatTile label="Rank" value={rank > 0 ? `#${rank} / ${allTeams.length}` : "—"} />
+          <StatTile label="Points" value={`${+runningTotal.toFixed(1)}`} />
+          <StatTile label="Tiles" value={`${completedTiles}/${totalTiles}`} />
+          <StatTile label="Members" value={`${team.participants.length}`} />
+        </div>
+
+        {chartPoints.length > 1 && (
+          <div className="bg-[#0e0820] border border-purple-900/40 rounded-xl p-5">
+            <p className="text-xs tracking-[0.2em] text-purple-400 uppercase font-semibold mb-4">Points over time</p>
+            <TeamProgressChart points={chartPoints} color={team.color} />
+          </div>
+        )}
+
+        <div className="bg-[#0e0820] border border-purple-900/40 rounded-xl p-5">
+          <p className="text-xs tracking-[0.2em] text-purple-400 uppercase font-semibold mb-4">Combined team stats (TempleOSRS)</p>
+          {teamStats.trackedCount === 0 ? (
+            <p className="text-sm text-purple-600/70">None of this team&apos;s players are tracked on TempleOSRS yet.</p>
+          ) : (
+            <>
+              <p className="text-[11px] text-purple-700/60 mb-4">{teamStats.trackedCount}/{teamStats.totalCount} members tracked</p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+                <StatTile label="Total EHB" value={Math.round(teamStats.ehb).toLocaleString()} accent="text-amber-400" />
+                <StatTile label="Total EHP" value={Math.round(teamStats.ehp).toLocaleString()} accent="text-green-400" />
+                <StatTile label="Combined XP" value={Math.round(teamStats.overallXp).toLocaleString()} accent="text-blue-400" />
+                <StatTile label="CL items" value={teamStats.collectionFinished.toLocaleString()} accent="text-teal-400" />
+              </div>
+
+              <p className="text-xs text-purple-500 mb-2">Clue scrolls (combined)</p>
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-x-4 gap-y-1.5 mb-5">
+                {(["beginner", "easy", "medium", "hard", "elite", "master"] as const).map((k) => (
+                  <div key={k} className="flex flex-col">
+                    <span className="text-[11px] text-purple-700/70 capitalize">{k}</span>
+                    <span className="text-sm text-teal-400 tabular-nums font-semibold">{teamStats.clues[k]}</span>
+                  </div>
+                ))}
+              </div>
+
+              {topBosses.length > 0 && (
+                <>
+                  <p className="text-xs text-purple-500 mb-2">Top bosses/activities (combined KC)</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-1.5">
+                    {topBosses.map(([boss, kc]) => (
+                      <div key={boss} className="flex items-center justify-between gap-2">
+                        <span className="text-sm text-purple-300 truncate">{boss}</span>
+                        <span className="text-sm text-purple-100 tabular-nums shrink-0 font-semibold">{kc.toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </>
+          )}
+        </div>
+
+        <div className="bg-[#0e0820] border border-purple-900/40 rounded-xl p-5">
+          <p className="text-xs tracking-[0.2em] text-purple-400 uppercase font-semibold mb-4">Tile progress</p>
+          <div className="flex flex-col gap-1.5">
+            {(board?.tiles ?? []).filter((t) => t.title.trim()).map((tile) => {
+              const tierDefs = (tile.tiers as TierDef[]) ?? [];
+              const achieved = achievedByTile.get(tile.id) ?? new Set<number>();
+              return (
+                <div key={tile.id} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-[#130a28]/60">
+                  <span className="text-sm text-purple-100 flex-1 truncate">{tile.title}</span>
+                  <div className="flex gap-1.5 shrink-0">
+                    {tierDefs.length === 0 ? (
+                      <span className="text-[11px] text-purple-700/50">no tiers</span>
+                    ) : (
+                      [...tierDefs].sort((a, b) => b.tier - a.tier).map((td) => (
+                        <span
+                          key={td.tier}
+                          className={`text-[10px] font-bold rounded px-1.5 py-0.5 border ${
+                            achieved.has(td.tier)
+                              ? "bg-green-600/20 text-green-400 border-green-600/40"
+                              : "bg-purple-950/40 text-purple-700 border-purple-900/40"
+                          }`}
+                        >
+                          T{td.tier}
+                        </span>
+                      ))
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="bg-[#0e0820] border border-purple-900/40 rounded-xl p-5">
+          <p className="text-xs tracking-[0.2em] text-purple-400 uppercase font-semibold mb-4">Activity</p>
+          {submissions.length === 0 ? (
+            <p className="text-sm text-purple-600/70">No submissions yet.</p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {[...submissions].reverse().map((s) => {
+                const tile = tileById.get(s.tileId);
+                return (
+                  <div key={s.id} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-[#130a28]/60">
+                    {s.imageUrl && (
+                      <div className="relative w-10 h-10 rounded overflow-hidden shrink-0 bg-black/30">
+                        <Image src={s.imageUrl} alt="" fill sizes="40px" className="object-cover" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-purple-100 truncate">
+                        {tile?.title ?? "Tile"}{" "}
+                        {s.tier != null && <span className="text-purple-500">T{s.tier}</span>}
+                        {s.dinkItemName && <span className="text-purple-500"> · {s.dinkItemName}</span>}
+                      </p>
+                      <p className="text-[11px] text-purple-700/70">
+                        {s.teamMember ?? "—"} · {s.source}
+                        {s.status !== "APPROVED" && <span className="text-amber-500"> · {s.status.toLowerCase()}</span>}
+                      </p>
+                    </div>
+                    <span className="text-[11px] text-purple-700/60 shrink-0" suppressHydrationWarning>
+                      {new Date(s.createdAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatTile({ label, value, accent }: { label: string; value: string; accent?: string }) {
+  return (
+    <div className="bg-[#0e0820] border border-purple-900/40 rounded-xl px-4 py-3">
+      <p className="text-[11px] text-purple-600 uppercase tracking-wide">{label}</p>
+      <p className={`text-xl font-bold tabular-nums ${accent ?? "text-white"}`}>{value}</p>
+    </div>
+  );
+}

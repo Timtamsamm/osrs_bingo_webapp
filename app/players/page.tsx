@@ -3,7 +3,6 @@ export const dynamic = "force-dynamic";
 import { prisma } from "@/lib/prisma";
 import BoardTabNav from "@/app/components/BoardTabNav";
 import PlayersFilter from "./PlayersFilter";
-import type { BossKCs } from "@/lib/temple";
 import { fetchTempleStats } from "@/lib/templeosrs";
 import Link from "next/link";
 
@@ -11,37 +10,29 @@ export default async function PlayersPage() {
   const [board, participants] = await Promise.all([
     prisma.bingoBoard.findFirst({
       where: { active: true },
-      select: {
-        name: true,
-        snapshots: { select: { memberName: true, bosses: true } },
-      },
+      select: { name: true },
     }),
     prisma.participant.findMany({
-      include: { team: { select: { name: true } } },
+      include: { team: { select: { id: true, name: true } } },
       orderBy: { rsn: "asc" },
     }),
   ]);
 
-  const snapshotMap = new Map<string, BossKCs>();
-  for (const s of board?.snapshots ?? []) {
-    snapshotMap.set(s.memberName.toLowerCase(), s.bosses as BossKCs);
-  }
-
-  const ehbList = await Promise.all(participants.map((p) => fetchTempleStats(p.rsn)));
+  const templeList = await Promise.all(participants.map((p) => fetchTempleStats(p.rsn)));
 
   const players = participants.map((p, i) => ({
     memberName: p.rsn,
+    teamId: p.team.id,
     teamName: p.team.name,
-    snapshot: snapshotMap.get(p.rsn.toLowerCase()) ?? null,
-    ehb: ehbList[i]?.ehb ?? null,
+    temple: templeList[i],
   }));
 
   const teams = [...new Set(participants.map((p) => p.team.name))].sort();
 
   const bossSet = new Set<string>();
-  for (const snapshot of snapshotMap.values()) {
-    for (const [boss, kc] of Object.entries(snapshot)) {
-      if (kc > 0) bossSet.add(boss);
+  for (const temple of templeList) {
+    for (const [boss, stat] of Object.entries(temple?.bosses ?? {})) {
+      if (stat.kc > 0) bossSet.add(boss);
     }
   }
   const bosses = Array.from(bossSet).sort();
