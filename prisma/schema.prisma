@@ -98,8 +98,22 @@ model BingoBoard {
   dinkToken     String?           // token players put in Dink's webhook URL (?token=xxx)
   rowColBonuses Json              @default("{}")  // { t1: number, t2: number, t3: number }
   size          Int               @default(5)     // grid is size x size (3, 4, or 5)
+  templeSnapshotTakenAt DateTime? // set once, atomically, the first time TempleOSRS baselines are captured
   createdAt     DateTime          @default(now())
   tiles         BingoTile[]
+  templeSnapshots TempleSnapshot[]
+}
+
+model TempleSnapshot {
+  id                 String     @id @default(cuid())
+  boardId            String
+  board              BingoBoard @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  rsn                String     // participant RSN at the time the baseline was captured
+  stats              Json       // serialized TempleStats (ehp, ehb, skills, bosses, clues) at baseline
+  collectionFinished Int        @default(0)
+  takenAt            DateTime   @default(now())
+
+  @@unique([boardId, rsn])
 }
 
 model BingoTile {

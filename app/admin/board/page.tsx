@@ -1,12 +1,16 @@
 import { prisma } from "@/lib/prisma";
 import BoardEditor from "./BoardEditor";
 import ResetBoardButton from "./ResetBoardButton";
+import TempleSnapshotResetButton from "./TempleSnapshotResetButton";
 
 export default async function AdminBoardPage() {
-  const board = await prisma.bingoBoard.findFirst({
-    where: { active: true },
-    include: { tiles: { orderBy: { position: "asc" } } },
-  });
+  const [board, snapshotCount] = await Promise.all([
+    prisma.bingoBoard.findFirst({
+      where: { active: true },
+      include: { tiles: { orderBy: { position: "asc" } } },
+    }),
+    prisma.templeSnapshot.count({ where: { board: { active: true } } }),
+  ]);
 
   return (
     <div className="flex flex-col gap-10">
@@ -22,6 +26,14 @@ export default async function AdminBoardPage() {
             tiers: (t.tiers ?? []) as unknown as import("./BoardEditor").TierDef[] | null,
           })),
         } : null} />
+      </div>
+
+      <div>
+        <h2 className="text-sm font-semibold text-purple-600 uppercase tracking-wider mb-3">TempleOSRS</h2>
+        <TempleSnapshotResetButton
+          takenAt={board?.templeSnapshotTakenAt?.toISOString() ?? null}
+          snapshotCount={snapshotCount}
+        />
       </div>
 
       <div>

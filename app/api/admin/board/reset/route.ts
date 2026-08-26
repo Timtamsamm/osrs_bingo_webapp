@@ -30,7 +30,8 @@ export async function DELETE() {
 
   const tileImageUrls = board.tiles.map((t) => t.imageUrl).filter((u): u is string => u !== null);
 
-  // Delete all submissions and reset all tile content in one transaction
+  // Delete all submissions, reset all tile content, and clear the TempleOSRS
+  // baseline (so the next event on this board gets a fresh snapshot) in one transaction
   await prisma.$transaction([
     prisma.submission.deleteMany({ where: { tileId: { in: tileIds } } }),
     prisma.bingoTile.updateMany({
@@ -42,6 +43,8 @@ export async function DELETE() {
         tiers: [],
       },
     }),
+    prisma.templeSnapshot.deleteMany({ where: { boardId: board.id } }),
+    prisma.bingoBoard.update({ where: { id: board.id }, data: { templeSnapshotTakenAt: null } }),
   ]);
 
   // Clean up Blobs after DB changes succeed

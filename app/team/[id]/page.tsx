@@ -4,8 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { fetchTeamStats } from "@/lib/templeosrs";
+import { fetchTeamStats, ensureTempleSnapshotTaken, type TempleSnapshotEntry, type TempleStats } from "@/lib/templeosrs";
 import TeamProgressChart from "./TeamProgressChart";
+import TeamBoardGrid from "./TeamBoardGrid";
 import BoardTabNav from "@/app/components/BoardTabNav";
 import { computeStandings, bonusPts, getRows, getCols, type TierDef, type BonusConfig } from "@/lib/scoring";
 
@@ -32,6 +33,7 @@ export default async function TeamPage({ params }: Props) {
       select: {
         id: true,
         name: true,
+        startsAt: true,
         rowColBonuses: true,
         size: true,
         tiles: {
@@ -40,6 +42,7 @@ export default async function TeamPage({ params }: Props) {
             id: true,
             position: true,
             title: true,
+            imageUrl: true,
             tiers: true,
             submissions: {
               where: { status: { not: "REJECTED" }, teamId: { not: null } },
@@ -160,7 +163,21 @@ export default async function TeamPage({ params }: Props) {
   const { standings } = computeStandings(scoringTiles, allTeams, bonusConfig, size);
   const rank = standings.findIndex((s) => s.id === team.id) + 1;
 
-  const teamStats = await fetchTeamStats(team.participants.map((p) => p.rsn));
+  if (board) await ensureTempleSnapshotTaken(board.id, board.startsAt);
+
+  const snapshotsByRsn = new Map<string, TempleSnapshotEntry>();
+  if (board) {
+    const snapshots = await prisma.templeSnapshot.findMany({
+      where: { boardId: board.id },
+      select: { rsn: true, stats: true, collectionFinished: true },
+    });
+    for (const s of snapshots) {
+      snapshotsByRsn.set(s.rsn, { stats: s.stats as unknown as TempleStats, collectionFinished: s.collectionFinished });
+    }
+  }
+  const eventStarted = snapshotsByRsn.size > 0;
+
+  const teamStats = await fetchTeamStats(team.participants.map((p) => p.rsn), snapshotsByRsn);
   const topBosses = Object.entries(teamStats.bosses).sort((a, b) => b[1] - a[1]).slice(0, 12);
 
   return (
@@ -194,7 +211,10 @@ export default async function TeamPage({ params }: Props) {
         )}
 
         <div className="bg-[#0e0820] border border-purple-900/40 rounded-xl p-5">
-          <p className="text-xs tracking-[0.2em] text-purple-400 uppercase font-semibold mb-4">Combined team stats (TempleOSRS)</p>
+          <p className="text-xs tracking-[0.2em] text-purple-400 uppercase font-semibold mb-1">Combined team stats (TempleOSRS)</p>
+          <p className="text-[11px] text-purple-700/60 mb-4">
+            {eventStarted ? "Gained since the event started" : "Lifetime totals — the event hasn't started yet"}
+          </p>
           {teamStats.trackedCount === 0 ? (
             <p className="text-sm text-purple-600/70">None of this team&apos;s players are tracked on TempleOSRS yet.</p>
           ) : (
@@ -235,36 +255,19 @@ export default async function TeamPage({ params }: Props) {
         </div>
 
         <div className="bg-[#0e0820] border border-purple-900/40 rounded-xl p-5">
-          <p className="text-xs tracking-[0.2em] text-purple-400 uppercase font-semibold mb-4">Tile progress</p>
-          <div className="flex flex-col gap-1.5">
-            {inRangeTiles.filter((t) => t.title.trim()).map((tile) => {
-              const tierDefs = (tile.tiers as TierDef[]) ?? [];
-              const achieved = achievedByTile.get(tile.id) ?? new Set<number>();
-              return (
-                <div key={tile.id} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-[#130a28]/60">
-                  <span className="text-sm text-purple-100 flex-1 truncate">{tile.title}</span>
-                  <div className="flex gap-1.5 shrink-0">
-                    {tierDefs.length === 0 ? (
-                      <span className="text-[11px] text-purple-700/50">no tiers</span>
-                    ) : (
-                      [...tierDefs].sort((a, b) => b.tier - a.tier).map((td) => (
-                        <span
-                          key={td.tier}
-                          className={`text-[10px] font-bold rounded px-1.5 py-0.5 border ${
-                            achieved.has(td.tier)
-                              ? "bg-green-600/20 text-green-400 border-green-600/40"
-                              : "bg-purple-950/40 text-purple-700 border-purple-900/40"
-                          }`}
-                        >
-                          T{td.tier}
-                        </span>
-                      ))
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <p className="text-xs tracking-[0.2em] text-purple-400 uppercase font-semibold mb-4">Board progress</p>
+          <TeamBoardGrid
+            size={size}
+            teamColor={team.color}
+            tiles={inRangeTiles.filter((t) => t.title.trim()).map((tile) => ({
+              id: tile.id,
+              position: tile.position,
+              title: tile.title,
+              imageUrl: tile.imageUrl,
+              tiers: ((tile.tiers as TierDef[]) ?? []).map((td) => ({ tier: td.tier, points: td.points, requiredCount: td.requiredCount })),
+              achievedTiers: [...(achievedByTile.get(tile.id) ?? new Set<number>())],
+            }))}
+          />
         </div>
 
         <div className="bg-[#0e0820] border border-purple-900/40 rounded-xl p-5">

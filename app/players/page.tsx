@@ -3,14 +3,14 @@ export const dynamic = "force-dynamic";
 import { prisma } from "@/lib/prisma";
 import BoardTabNav from "@/app/components/BoardTabNav";
 import PlayersFilter from "./PlayersFilter";
-import { fetchTempleStats } from "@/lib/templeosrs";
+import { fetchTempleStats, diffTempleStats, ensureTempleSnapshotTaken, type TempleSnapshotEntry, type TempleStats } from "@/lib/templeosrs";
 import Link from "next/link";
 
 export default async function PlayersPage() {
   const [board, participants] = await Promise.all([
     prisma.bingoBoard.findFirst({
       where: { active: true },
-      select: { name: true },
+      select: { id: true, name: true, startsAt: true },
     }),
     prisma.participant.findMany({
       include: { team: { select: { id: true, name: true } } },
@@ -18,7 +18,26 @@ export default async function PlayersPage() {
     }),
   ]);
 
-  const templeList = await Promise.all(participants.map((p) => fetchTempleStats(p.rsn)));
+  if (board) await ensureTempleSnapshotTaken(board.id, board.startsAt);
+
+  const snapshotsByRsn = new Map<string, TempleSnapshotEntry>();
+  if (board) {
+    const snapshots = await prisma.templeSnapshot.findMany({
+      where: { boardId: board.id },
+      select: { rsn: true, stats: true, collectionFinished: true },
+    });
+    for (const s of snapshots) {
+      snapshotsByRsn.set(s.rsn, { stats: s.stats as unknown as TempleStats, collectionFinished: s.collectionFinished });
+    }
+  }
+  const eventStarted = snapshotsByRsn.size > 0;
+
+  const rawTempleList = await Promise.all(participants.map((p) => fetchTempleStats(p.rsn)));
+  const templeList = rawTempleList.map((raw, i) => {
+    if (!raw) return null;
+    const snapshot = snapshotsByRsn.get(participants[i].rsn);
+    return snapshot ? diffTempleStats(raw, snapshot.stats) : raw;
+  });
 
   const players = participants.map((p, i) => ({
     memberName: p.rsn,
@@ -47,6 +66,11 @@ export default async function PlayersPage() {
           <h1 className="font-[family-name:var(--font-cinzel)] text-4xl font-black text-white heading-glow">
             Players
           </h1>
+          <p className="text-xs text-purple-600/70 mt-2">
+            {eventStarted
+              ? "TempleOSRS stats shown are gained since the event started"
+              : "TempleOSRS stats shown are lifetime totals — the event hasn't started yet"}
+          </p>
           <div className="absolute right-0 top-0">
             <Link href="/admin" className="text-xs text-purple-500 hover:text-purple-300 transition-colors font-medium">
               Admin →

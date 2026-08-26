@@ -12,6 +12,8 @@
  * keeps working as they add new content.
  */
 
+import { prisma } from "@/lib/prisma";
+
 const USER_AGENT = "OSRS-Bingo-App/1.0";
 
 export interface SkillStat {
@@ -141,8 +143,93 @@ export interface TeamStats {
   totalCount: number;
 }
 
-/** Sums each participant's TempleOSRS stats into team-wide totals. */
-export async function fetchTeamStats(rsns: string[]): Promise<TeamStats> {
+export interface TempleSnapshotEntry {
+  stats: TempleStats;
+  collectionFinished: number;
+}
+
+const clamp0 = (n: number) => (n > 0 ? n : 0);
+
+/**
+ * Subtracts a baseline snapshot from a player's current stats to get
+ * "gained since the event started." Level/rank are kept as current values
+ * (a level isn't meaningfully "gained"); everything else becomes a delta,
+ * clamped to 0 in case TempleOSRS's crawl was briefly stale at baseline time.
+ */
+export function diffTempleStats(current: TempleStats, baseline: TempleStats | null): TempleStats {
+  if (!baseline) return current;
+
+  const skills: Record<string, SkillStat> = {};
+  for (const [name, cur] of Object.entries(current.skills)) {
+    const base = baseline.skills[name];
+    skills[name] = {
+      xp: clamp0(cur.xp - (base?.xp ?? 0)),
+      level: cur.level,
+      rank: cur.rank,
+      ehp: clamp0(cur.ehp - (base?.ehp ?? 0)),
+    };
+  }
+
+  const bosses: Record<string, BossStat> = {};
+  for (const [name, cur] of Object.entries(current.bosses)) {
+    const base = baseline.bosses[name];
+    bosses[name] = {
+      kc: clamp0(cur.kc - (base?.kc ?? 0)),
+      ehb: clamp0(cur.ehb - (base?.ehb ?? 0)),
+    };
+  }
+
+  return {
+    ehp: clamp0(current.ehp - baseline.ehp),
+    ehb: clamp0(current.ehb - baseline.ehb),
+    skills,
+    bosses,
+    clues: {
+      all: clamp0(current.clues.all - baseline.clues.all),
+      beginner: clamp0(current.clues.beginner - baseline.clues.beginner),
+      easy: clamp0(current.clues.easy - baseline.clues.easy),
+      medium: clamp0(current.clues.medium - baseline.clues.medium),
+      hard: clamp0(current.clues.hard - baseline.clues.hard),
+      elite: clamp0(current.clues.elite - baseline.clues.elite),
+      master: clamp0(current.clues.master - baseline.clues.master),
+    },
+  };
+}
+
+/**
+ * Takes a one-time TempleOSRS baseline snapshot of every participant, so
+ * stats can be shown as "gained since the event started" instead of lifetime
+ * totals. Safe to call on every page load that shows Temple stats — it's a
+ * no-op unless the board has actually started and no snapshot exists yet.
+ * The atomic conditional update means only one concurrent caller actually
+ * does the work; the rest see count 0 and return immediately.
+ */
+export async function ensureTempleSnapshotTaken(boardId: string, startsAt: Date | null): Promise<void> {
+  if (!startsAt || startsAt > new Date()) return;
+
+  const claimed = await prisma.bingoBoard.updateMany({
+    where: { id: boardId, templeSnapshotTakenAt: null },
+    data: { templeSnapshotTakenAt: new Date() },
+  });
+  if (claimed.count === 0) return;
+
+  const participants = await prisma.participant.findMany({ select: { rsn: true } });
+  await Promise.all(
+    participants.map(async (p) => {
+      const [stats, clog] = await Promise.all([fetchTempleStats(p.rsn), fetchCollectionLogStats(p.rsn)]);
+      if (!stats) return;
+      await prisma.templeSnapshot.upsert({
+        where: { boardId_rsn: { boardId, rsn: p.rsn } },
+        create: { boardId, rsn: p.rsn, stats: JSON.parse(JSON.stringify(stats)), collectionFinished: clog?.finished ?? 0 },
+        update: { stats: JSON.parse(JSON.stringify(stats)), collectionFinished: clog?.finished ?? 0 },
+      });
+    })
+  );
+}
+
+/** Sums each participant's TempleOSRS stats into team-wide totals, diffed
+ * against their baseline snapshot when one exists for this board. */
+export async function fetchTeamStats(rsns: string[], snapshotsByRsn?: Map<string, TempleSnapshotEntry>): Promise<TeamStats> {
   const [statsList, clogList] = await Promise.all([
     Promise.all(rsns.map((rsn) => fetchTempleStats(rsn))),
     Promise.all(rsns.map((rsn) => fetchCollectionLogStats(rsn))),
@@ -159,8 +246,10 @@ export async function fetchTeamStats(rsns: string[]): Promise<TeamStats> {
     totalCount: rsns.length,
   };
 
-  for (const s of statsList) {
-    if (!s) continue;
+  statsList.forEach((raw, i) => {
+    if (!raw) return;
+    const snapshot = snapshotsByRsn?.get(rsns[i]);
+    const s = snapshot ? diffTempleStats(raw, snapshot.stats) : raw;
     totals.ehb += s.ehb;
     totals.ehp += s.ehp;
     totals.overallXp += s.skills.Overall?.xp ?? 0;
@@ -171,11 +260,13 @@ export async function fetchTeamStats(rsns: string[]): Promise<TeamStats> {
       if (stat.kc <= 0) continue;
       totals.bosses[boss] = (totals.bosses[boss] ?? 0) + stat.kc;
     }
-  }
+  });
 
-  for (const c of clogList) {
-    if (c) totals.collectionFinished += c.finished;
-  }
+  clogList.forEach((c, i) => {
+    if (!c) return;
+    const snapshot = snapshotsByRsn?.get(rsns[i]);
+    totals.collectionFinished += snapshot ? clamp0(c.finished - snapshot.collectionFinished) : c.finished;
+  });
 
   return totals;
 }
