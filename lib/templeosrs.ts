@@ -13,8 +13,17 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { unstable_cache } from "next/cache";
 
 const USER_AGENT = "OSRS-Bingo-App/1.0";
+// Stats are cached per-RSN for a few minutes so a page load doesn't re-fetch
+// every participant from TempleOSRS every time. At event scale (dozens of
+// players, several people loading /players or a team page around the same
+// moment) an uncached fan-out risks stacking hundreds of concurrent outbound
+// calls — slow, and a real risk of hitting the serverless function's
+// execution time limit or getting rate-limited by TempleOSRS. A few minutes
+// of staleness is an easy trade for a live bingo board.
+const CACHE_SECONDS = 300;
 
 export interface SkillStat {
   xp: number;
@@ -67,7 +76,7 @@ async function templeFetch(url: string): Promise<Record<string, unknown> | null>
   }
 }
 
-export async function fetchTempleStats(rsn: string): Promise<TempleStats | null> {
+async function fetchTempleStatsUncached(rsn: string): Promise<TempleStats | null> {
   const url = `https://templeosrs.com/api/player_stats.php?player=${encodeURIComponent(rsn)}&bosses=1`;
   const data = await templeFetch(url);
   if (!data) return null;
@@ -117,7 +126,7 @@ export async function fetchTempleStats(rsn: string): Promise<TempleStats | null>
   };
 }
 
-export async function fetchCollectionLogStats(rsn: string): Promise<CollectionLogStats | null> {
+async function fetchCollectionLogStatsUncached(rsn: string): Promise<CollectionLogStats | null> {
   const url = `https://templeosrs.com/api/collection-log/player_collection_log.php?player=${encodeURIComponent(rsn)}`;
   const data = await templeFetch(url);
   if (!data) return null;
@@ -131,6 +140,9 @@ export async function fetchCollectionLogStats(rsn: string): Promise<CollectionLo
     rank: Number(data.collections_hiscores_rank) || -1,
   };
 }
+
+export const fetchTempleStats = unstable_cache(fetchTempleStatsUncached, ["temple-stats"], { revalidate: CACHE_SECONDS });
+export const fetchCollectionLogStats = unstable_cache(fetchCollectionLogStatsUncached, ["temple-collection-log"], { revalidate: CACHE_SECONDS });
 
 export interface TeamStats {
   ehb: number;
