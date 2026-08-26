@@ -15,7 +15,7 @@ export default async function AdminSubmissionsPage({ searchParams }: Props) {
 
   const teamFilter = team ? { team: { name: team } } : {};
 
-  const [pending, dinkApproved, allTeams, awardTeams, activeBoard] = await Promise.all([
+  const [pending, dinkApproved, manuallyAwarded, allTeams, awardTeams, activeBoard] = await Promise.all([
     prisma.submission.findMany({
       where: { status: "PENDING", ...teamFilter },
       orderBy: { createdAt: "asc" },
@@ -26,6 +26,15 @@ export default async function AdminSubmissionsPage({ searchParams }: Props) {
     }),
     prisma.submission.findMany({
       where: { status: "APPROVED", source: "dink", ...teamFilter },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+      include: {
+        team: { select: { name: true } },
+        tile: { select: { title: true } },
+      },
+    }),
+    prisma.submission.findMany({
+      where: { status: "APPROVED", source: "manual", ...teamFilter },
       orderBy: { createdAt: "desc" },
       take: 100,
       include: {
@@ -85,6 +94,20 @@ export default async function AdminSubmissionsPage({ searchParams }: Props) {
           </h2>
           <div className="flex flex-col gap-4">
             {dinkApproved.map((s) => (
+              <SubmissionReviewer key={s.id} submission={s} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {manuallyAwarded.length > 0 && (
+        <div className="mt-10">
+          <h2 className="text-sm font-semibold text-purple-600 uppercase tracking-wider mb-4">
+            Manually Awarded
+            <span className="ml-2 text-purple-700 font-normal normal-case">— reject or delete to undo an award</span>
+          </h2>
+          <div className="flex flex-col gap-4">
+            {manuallyAwarded.map((s) => (
               <SubmissionReviewer key={s.id} submission={s} />
             ))}
           </div>
