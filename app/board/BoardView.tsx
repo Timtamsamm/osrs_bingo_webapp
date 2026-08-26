@@ -78,14 +78,23 @@ function contrastColor(hex: string): string {
   return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.55 ? "#000" : "#fff";
 }
 
+const MAX_VISIBLE_TEAMS = 6;
+
 function TeamDots({ tile, teams }: { tile: TileSummary; teams: TeamInfo[] }) {
+  // Teams with any progress are more useful to see than idle ones, so they
+  // take priority for the limited dot slots when there are many teams.
+  const withStatus = teams.map((team) => {
+    const status = tile.teamStatuses.find((s) => s.teamId === team.id);
+    return { team, completed: status?.completed ?? false, inProgress: status?.inProgress ?? false, tiers: status?.achievedTiers ?? [] };
+  });
+  const active = withStatus.filter((t) => t.completed || t.inProgress);
+  const idle = withStatus.filter((t) => !t.completed && !t.inProgress);
+  const visible = [...active, ...idle].slice(0, MAX_VISIBLE_TEAMS);
+  const overflow = withStatus.length - visible.length;
+
   return (
-    <div className="flex gap-1 flex-wrap">
-      {teams.map((team) => {
-        const status = tile.teamStatuses.find((s) => s.teamId === team.id);
-        const completed = status?.completed ?? false;
-        const inProgress = status?.inProgress ?? false;
-        const tiers = status?.achievedTiers ?? [];
+    <div className="flex items-center gap-1 flex-wrap">
+      {visible.map(({ team, completed, inProgress, tiers }) => {
         const label = completed ? "T1 complete" : tiers.length > 0 ? `T${[...tiers].sort().join(", T")} achieved` : "not started";
         return (
           <span
@@ -100,6 +109,11 @@ function TeamDots({ tile, teams }: { tile: TileSummary; teams: TeamInfo[] }) {
           />
         );
       })}
+      {overflow > 0 && (
+        <span className="text-[9px] text-purple-500/70 font-medium leading-none" title={`+${overflow} more team${overflow === 1 ? "" : "s"}`}>
+          +{overflow}
+        </span>
+      )}
     </div>
   );
 }
@@ -110,9 +124,11 @@ function CompletionBadge({ tile, teams }: { tile: TileSummary; teams: TeamInfo[]
     .map((s) => teams.find((t) => t.id === s.teamId))
     .filter(Boolean) as TeamInfo[];
   if (completedTeams.length === 0) return null;
+  const visible = completedTeams.slice(0, MAX_VISIBLE_TEAMS);
+  const overflow = completedTeams.length - visible.length;
   return (
-    <div className="flex gap-0.5">
-      {completedTeams.map((team) => (
+    <div className="flex items-center gap-0.5">
+      {visible.map((team) => (
         <span
           key={team.id}
           className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-bold"
@@ -122,6 +138,11 @@ function CompletionBadge({ tile, teams }: { tile: TileSummary; teams: TeamInfo[]
           ✓
         </span>
       ))}
+      {overflow > 0 && (
+        <span className="text-[9px] font-bold text-purple-300 ml-0.5" title={`+${overflow} more team${overflow === 1 ? "" : "s"} completed`}>
+          +{overflow}
+        </span>
+      )}
     </div>
   );
 }
@@ -138,29 +159,42 @@ function LineIndicator({
   direction: "row" | "col";
 }) {
   const achieved = summary.statuses.filter((s) => s.bonusTier !== null);
+  const MAX_VISIBLE_LINE_BADGES = 3;
+  const visible = achieved.slice(0, MAX_VISIBLE_LINE_BADGES);
+  const overflow = achieved.length - visible.length;
 
   const inner =
     achieved.length === 0 ? (
       <span className="text-[9px] text-purple-900/30 select-none leading-none">—</span>
     ) : (
-      achieved.map((s) => {
-        const team = teams.find((t) => t.id === s.teamId)!;
-        const pts = s.bonusTier === 1 ? bonusConfig.t1 : s.bonusTier === 2 ? bonusConfig.t2 : bonusConfig.t3;
-        return (
+      <>
+        {visible.map((s) => {
+          const team = teams.find((t) => t.id === s.teamId)!;
+          const pts = s.bonusTier === 1 ? bonusConfig.t1 : s.bonusTier === 2 ? bonusConfig.t2 : bonusConfig.t3;
+          return (
+            <span
+              key={s.teamId}
+              className="text-[9px] font-bold rounded px-1 py-0.5 leading-none"
+              style={{
+                background: team.color,
+                color: contrastColor(team.color),
+                boxShadow: `0 0 5px ${team.color}60`,
+              }}
+              title={`${team.name}: ${direction} complete — T${s.bonusTier} (+${pts} pts)`}
+            >
+              T{s.bonusTier}
+            </span>
+          );
+        })}
+        {overflow > 0 && (
           <span
-            key={s.teamId}
-            className="text-[9px] font-bold rounded px-1 py-0.5 leading-none"
-            style={{
-              background: team.color,
-              color: contrastColor(team.color),
-              boxShadow: `0 0 5px ${team.color}60`,
-            }}
-            title={`${team.name}: ${direction} complete — T${s.bonusTier} (+${pts} pts)`}
+            className="text-[9px] text-purple-400 font-medium leading-none"
+            title={`+${overflow} more team${overflow === 1 ? "" : "s"}`}
           >
-            T{s.bonusTier}
+            +{overflow}
           </span>
-        );
-      })
+        )}
+      </>
     );
 
   if (direction === "row") {
