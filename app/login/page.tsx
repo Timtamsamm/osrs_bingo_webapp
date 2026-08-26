@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -50,6 +51,10 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-[#080510] flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
+        <Link href="/board" className="inline-block mb-6 text-xs text-purple-500 hover:text-purple-300 transition-colors font-medium">
+          ← Back to board
+        </Link>
+
         <div className="text-center mb-8">
           <h1 className="font-[family-name:var(--font-cinzel)] text-3xl font-black text-white heading-glow mb-1">
             OSRS Bingo
