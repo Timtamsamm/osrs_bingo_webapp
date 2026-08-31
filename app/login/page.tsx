@@ -35,7 +35,7 @@ export default function LoginPage() {
     if (result?.error) {
       setError("Incorrect username or password.");
     } else {
-      router.push("/admin");
+      router.push("/bingo/admin");
     }
   }
 
@@ -51,8 +51,8 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-[#080510] flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
-        <Link href="/board" className="inline-block mb-6 text-xs text-purple-500 hover:text-purple-300 transition-colors font-medium">
-          ← Back to board
+        <Link href="/" className="inline-block mb-6 text-xs text-purple-500 hover:text-purple-300 transition-colors font-medium">
+          ← Home
         </Link>
 
         <div className="text-center mb-8">

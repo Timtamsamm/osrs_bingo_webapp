@@ -153,6 +153,19 @@ model Submission {
   tile BingoTile @relation(fields: [tileId], references: [id], onDelete: Cascade)
 }
 
+// ── Events ─────────────────────────────────────────────────────────────────
+
+model Event {
+  id               String   @id @default(cuid())
+  title            String
+  description      String?
+  imageUrl         String?
+  startsAt         DateTime
+  endsAt           DateTime
+  participantNames String[] @default([]) // clan member display names who took part (manually set for now)
+  createdAt        DateTime @default(now())
+}
+
 // ── Enums ──────────────────────────────────────────────────────────────────
 
 enum Role {

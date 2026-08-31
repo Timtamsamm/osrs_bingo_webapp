@@ -11,8 +11,10 @@ export const authConfig: NextAuthConfig = {
       const { pathname } = nextUrl
       // Always allow auth API routes, login page, and inbound webhooks
       if (pathname.startsWith("/api/auth") || pathname === "/login" || pathname.startsWith("/api/webhook")) return true
-      // Admin routes (pages + API) require an authenticated admin
-      if (pathname.startsWith("/admin") || pathname.startsWith("/api/admin")) {
+      // Admin routes (pages + API) require an authenticated admin.
+      // Each section owns its own /<section>/admin path — add new prefixes here as sections gain admin panels.
+      const adminPagePrefixes = ["/bingo/admin", "/events/admin"]
+      if (adminPagePrefixes.some((p) => pathname.startsWith(p)) || pathname.startsWith("/api/admin")) {
         return isLoggedIn && (auth?.user as { role?: string })?.role === "ADMIN"
       }
       // Everything else is public

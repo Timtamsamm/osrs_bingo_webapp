@@ -9,9 +9,9 @@ export default function BoardTabNav() {
   return (
     <div className="flex justify-center mb-6">
       <div className="flex bg-surface/80 border border-purple-900/40 rounded-xl p-1 gap-1">
-        <TabLink href="/board" active={pathname === "/board"}>Board</TabLink>
-        <TabLink href="/teams" active={pathname === "/teams" || pathname.startsWith("/team/")}>Teams</TabLink>
-        <TabLink href="/players" active={pathname === "/players"}>Players</TabLink>
+        <TabLink href="/bingo/board" active={pathname === "/bingo/board"}>Board</TabLink>
+        <TabLink href="/bingo/teams" active={pathname === "/bingo/teams" || pathname.startsWith("/bingo/team/")}>Teams</TabLink>
+        <TabLink href="/bingo/players" active={pathname === "/bingo/players"}>Players</TabLink>
       </div>
     </div>
   );

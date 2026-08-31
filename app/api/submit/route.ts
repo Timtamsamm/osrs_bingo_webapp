@@ -57,6 +57,6 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  revalidatePath("/board");
+  revalidatePath("/bingo/board");
   return NextResponse.json({ ok: true });
 }

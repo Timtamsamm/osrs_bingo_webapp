@@ -49,8 +49,8 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  revalidatePath("/admin/submissions");
-  revalidatePath("/board");
-  revalidatePath("/leaderboard");
+  revalidatePath("/bingo/admin/submissions");
+  revalidatePath("/bingo/board");
+  revalidatePath("/bingo/leaderboard");
   return NextResponse.json(submission);
 }

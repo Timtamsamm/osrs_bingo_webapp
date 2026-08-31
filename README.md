@@ -136,7 +136,7 @@ The app runs on any Node.js host that supports Next.js with the following caveat
 
 ## Admin Guide
 
-Once logged in as an admin, visit `/admin` to:
+Once logged in as an admin, visit `/bingo/admin` to:
 
 - **Board** — configure tiles (title, points, required submission count, reference image, auto-approve toggle), set event start/end dates, reset the board, and take KC snapshots
 - **Teams** — create team accounts, set passwords, manage team member rosters
