@@ -69,9 +69,25 @@ const cinzel = Cinzel({
   weight: ["700", "900"],
 });
 
+const SITE_TITLE = "Wong Tongs";
+const SITE_DESCRIPTION = "Wong Tongs clan hub — bingo, events, and member stats.";
+const SITE_IMAGE = "/WONG_TONGS_2026_06_24_00_50_40_UTC.png";
+
 export const metadata: Metadata = {
-  title: "OSRS Bingo",
-  description: "Old School RuneScape bingo competition",
+  metadataBase: new URL("https://www.upthetongs.com"),
+  title: SITE_TITLE,
+  description: SITE_DESCRIPTION,
+  openGraph: {
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    images: [SITE_IMAGE],
+  },
+  twitter: {
+    card: "summary",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    images: [SITE_IMAGE],
+  },
 };
 
 export default async function RootLayout({

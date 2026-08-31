@@ -105,7 +105,7 @@ interface Props {
   board: Board | null;
 }
 
-const inputCls = "bg-[#130a28] border border-purple-900/50 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/40 focus:border-purple-600/60 placeholder-purple-800";
+const inputCls = "bg-[#130a28] border border-purple-900/50 rounded-lg px-2.5 py-1.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/40 focus:border-purple-600/60 placeholder-purple-800";
 const labelCls = "text-xs text-purple-400 font-medium";
 
 const TIER_META: Record<"t1" | "t2" | "t3", { num: 1 | 2 | 3; label: string; hint: string }> = {
@@ -225,22 +225,22 @@ export default function BoardEditor({ board }: Props) {
   const selectedTile = selected !== null ? tiles[selected] : null;
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-5">
       {/* Board meta */}
-      <div className="bg-[#0e0820] border border-purple-900/40 rounded-xl p-6 flex flex-col gap-4">
-        <h2 className="font-semibold text-purple-100">Board Details</h2>
-        <div className="flex gap-4">
-          <div className="flex-1 flex flex-col gap-1.5">
+      <div className="bg-[#0e0820] border border-purple-900/40 rounded-xl p-4 flex flex-col gap-3">
+        <h2 className="font-semibold text-purple-100 text-sm">Board Details</h2>
+        <div className="flex gap-3">
+          <div className="flex-1 flex flex-col gap-1">
             <label className={labelCls}>Name</label>
             <input value={boardName} onChange={(e) => setBoardName(e.target.value)} placeholder="e.g. Summer Bingo 2025" className={inputCls} />
           </div>
-          <div className="flex-1 flex flex-col gap-1.5">
+          <div className="flex-1 flex flex-col gap-1">
             <label className={labelCls}>Description (optional)</label>
             <input value={boardDesc} onChange={(e) => setBoardDesc(e.target.value)} placeholder="A short description" className={inputCls} />
           </div>
         </div>
 
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-1">
           <label className={labelCls}>Dink webhook token (optional)</label>
           <div className="flex gap-2 items-center">
             <input
@@ -249,7 +249,7 @@ export default function BoardEditor({ board }: Props) {
               placeholder="Leave blank to disable Dink integration"
               className={`${inputCls} flex-1 font-mono`}
             />
-            <button type="button" onClick={generateDinkToken} className="text-xs bg-purple-900/50 hover:bg-purple-800/60 border border-purple-700/40 text-purple-300 rounded-lg px-3 py-2 transition-colors shrink-0">
+            <button type="button" onClick={generateDinkToken} className="text-xs bg-purple-900/50 hover:bg-purple-800/60 border border-purple-700/40 text-purple-300 rounded-lg px-3 py-1.5 transition-colors shrink-0">
               Generate
             </button>
             {boardDinkToken && (
@@ -259,38 +259,38 @@ export default function BoardEditor({ board }: Props) {
             )}
           </div>
           {boardDinkToken && (
-            <p className="text-xs text-purple-600 font-mono break-all mt-1">
+            <p className="text-xs text-purple-600 font-mono break-all">
               Webhook URL: <span className="text-purple-400/80 select-all">/api/webhook/dink?token={boardDinkToken}</span>
             </p>
           )}
-          <p className="text-xs text-purple-700/60">Players paste this URL into Dink → Webhook URLs. Drops matching tile item IDs auto-approve.</p>
+          <p className="text-[11px] text-purple-700/60">Players paste this URL into Dink → Webhook URLs. Drops matching tile item IDs auto-approve.</p>
         </div>
 
         {/* Row / Column completion bonus */}
-        <div className="flex flex-col gap-2 border-t border-purple-900/30 pt-4">
+        <div className="flex flex-col gap-1.5 border-t border-purple-900/30 pt-3">
           <div>
             <label className={labelCls}>Row &amp; Column Completion Bonus</label>
-            <p className="text-[11px] text-purple-700/60 mt-0.5">
+            <p className="text-[11px] text-purple-700/60">
               Awarded when a team completes every tile in a row or column. Bonus tier = lowest-value tier achieved across the line.
             </p>
           </div>
-          <div className="flex gap-4">
-            <div className="flex flex-col gap-1.5 flex-1">
+          <div className="flex gap-3">
+            <div className="flex flex-col gap-1 flex-1">
               <label className={labelCls}>T1 bonus pts (hardest)</label>
               <input type="number" min={0} step={0.5} value={bonusT1} onChange={(e) => setBonusT1(Number(e.target.value))} className={inputCls} />
             </div>
-            <div className="flex flex-col gap-1.5 flex-1">
+            <div className="flex flex-col gap-1 flex-1">
               <label className={labelCls}>T2 bonus pts</label>
               <input type="number" min={0} step={0.5} value={bonusT2} onChange={(e) => setBonusT2(Number(e.target.value))} className={inputCls} />
             </div>
-            <div className="flex flex-col gap-1.5 flex-1">
+            <div className="flex flex-col gap-1 flex-1">
               <label className={labelCls}>T3 bonus pts (easiest)</label>
               <input type="number" min={0} step={0.5} value={bonusT3} onChange={(e) => setBonusT3(Number(e.target.value))} className={inputCls} />
             </div>
           </div>
         </div>
 
-        <div className="flex flex-col gap-1.5 border-t border-purple-900/30 pt-4">
+        <div className="flex flex-col gap-1 border-t border-purple-900/30 pt-3">
           <label className={labelCls}>Board size</label>
           <div className="flex gap-2">
             {BOARD_SIZES.map((n) => (
@@ -298,7 +298,7 @@ export default function BoardEditor({ board }: Props) {
                 key={n}
                 type="button"
                 onClick={() => { setBoardSize(n); setSelected(null); }}
-                className={`text-xs font-semibold rounded-lg px-3 py-2 border transition-colors ${
+                className={`text-xs font-semibold rounded-lg px-3 py-1.5 border transition-colors ${
                   boardSize === n
                     ? "bg-purple-700/60 border-purple-500 text-white"
                     : "bg-[#130a28] border-purple-900/50 text-purple-400 hover:border-purple-700/60"
@@ -313,15 +313,15 @@ export default function BoardEditor({ board }: Props) {
           </p>
         </div>
 
-        <div className="flex gap-4 items-start">
-          <div className="flex flex-col gap-1.5 flex-1">
+        <div className="flex gap-3 items-start">
+          <div className="flex flex-col gap-1 flex-1">
             <label className={labelCls}>Event start (optional)</label>
             <div className="flex gap-2">
               <input type="datetime-local" value={boardStartsAt} onChange={(e) => setBoardStartsAt(e.target.value)} className={`${inputCls} flex-1 [color-scheme:dark]`} />
               {boardStartsAt && <button type="button" onClick={() => setBoardStartsAt("")} className="text-xs text-purple-600 hover:text-red-400 transition-colors">Clear</button>}
             </div>
           </div>
-          <div className="flex flex-col gap-1.5 flex-1">
+          <div className="flex flex-col gap-1 flex-1">
             <label className={labelCls}>Event end (optional)</label>
             <div className="flex gap-2">
               <input type="datetime-local" value={boardEndsAt} onChange={(e) => setBoardEndsAt(e.target.value)} className={`${inputCls} flex-1 [color-scheme:dark]`} />
@@ -331,11 +331,11 @@ export default function BoardEditor({ board }: Props) {
         </div>
       </div>
 
-      <div className="flex gap-6">
+      <div className="flex gap-4">
         {/* size×size grid */}
-        <div className="flex flex-col gap-2 shrink-0">
-          <p className="text-xs text-purple-500 mb-1">Click a tile to edit it</p>
-          <div className={`grid ${GRID_COLS_CLASS[boardSize]} gap-1.5`}>
+        <div className="flex flex-col gap-1.5 shrink-0">
+          <p className="text-xs text-purple-500">Click a tile to edit it</p>
+          <div className={`grid ${GRID_COLS_CLASS[boardSize]} gap-1`}>
             {Array.from({ length: boardSize * boardSize }, (_, i) => {
               const t = tiles[i];
               const filled = t.title.trim().length > 0;
@@ -344,7 +344,7 @@ export default function BoardEditor({ board }: Props) {
                 <button
                   key={i}
                   onClick={() => setSelected(i === selected ? null : i)}
-                  className={`w-16 h-16 rounded-lg border text-xs font-medium flex flex-col items-center justify-center p-1 text-center transition-all ${
+                  className={`w-14 h-14 rounded-lg border text-xs font-medium flex flex-col items-center justify-center p-1 text-center transition-all ${
                     selected === i
                       ? "border-purple-400 bg-purple-400/10 text-purple-200"
                       : filled
@@ -363,26 +363,26 @@ export default function BoardEditor({ board }: Props) {
         </div>
 
         {/* Tile editor */}
-        <div className="flex-1 min-w-0 bg-[#0e0820] border border-purple-900/40 rounded-xl p-5 overflow-y-auto max-h-[85vh]">
+        <div className="flex-1 min-w-0 bg-[#0e0820] border border-purple-900/40 rounded-xl p-4">
           {selected === null ? (
             <p className="text-purple-600 text-sm">Select a tile on the grid to edit it.</p>
           ) : (
-            <div className="flex flex-col gap-4">
-              <h3 className="font-semibold text-purple-100">Tile {selected + 1}</h3>
+            <div className="flex flex-col gap-3">
+              <h3 className="font-semibold text-purple-100 text-sm">Tile {selected + 1}</h3>
 
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-1">
                 <label className={labelCls}>Title</label>
                 <input value={selectedTile!.title} onChange={(e) => updateTile(selected, "title", e.target.value)} placeholder="e.g. Araxxor" className={inputCls} />
               </div>
 
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-1">
                 <label className={labelCls}>Description (optional)</label>
-                <textarea value={selectedTile!.description} onChange={(e) => updateTile(selected, "description", e.target.value)} rows={3} placeholder="Any extra instructions" className={`${inputCls} resize-y`} />
+                <textarea value={selectedTile!.description} onChange={(e) => updateTile(selected, "description", e.target.value)} rows={2} placeholder="Any extra instructions" className={`${inputCls} resize-y`} />
               </div>
 
               {/* Tier sections */}
-              <div className="flex flex-col gap-2">
-                <p className={`${labelCls} mb-1`}>Tiers — add Dink items to activate a tier</p>
+              <div className="flex flex-col gap-1.5">
+                <p className={labelCls}>Tiers — add Dink items to activate a tier</p>
                 {(["t3", "t2", "t1"] as const).map((tierKey) => {
                   const meta = TIER_META[tierKey];
                   const ts = selectedTile![tierKey];
@@ -390,7 +390,7 @@ export default function BoardEditor({ board }: Props) {
                   return (
                     <div
                       key={tierKey}
-                      className={`border rounded-lg p-3 flex flex-col gap-2.5 transition-colors ${
+                      className={`border rounded-lg p-2.5 flex flex-col gap-2 transition-colors ${
                         hasItems ? "border-purple-700/50 bg-[#130a28]/60" : "border-purple-900/30 bg-transparent"
                       }`}
                     >
@@ -412,13 +412,13 @@ export default function BoardEditor({ board }: Props) {
                         <textarea
                           value={ts.description}
                           onChange={(e) => updateTier(selected, tierKey, "description", e.target.value)}
-                          rows={2}
+                          rows={1}
                           placeholder="What specifically this tier requires"
                           className={`${inputCls} resize-y`}
                         />
                       </div>
-                      <div className="flex gap-3 items-start">
-                        <div className="flex flex-col gap-1 w-24 shrink-0">
+                      <div className="flex gap-2 items-start">
+                        <div className="flex flex-col gap-1 w-20 shrink-0">
                           <label className={labelCls}>Points</label>
                           <input
                             type="number"
@@ -429,7 +429,7 @@ export default function BoardEditor({ board }: Props) {
                             className={inputCls}
                           />
                         </div>
-                        <div className="flex flex-col gap-1 w-24 shrink-0">
+                        <div className="flex flex-col gap-1 w-20 shrink-0">
                           <label className={labelCls}>Required</label>
                           <input
                             type="number"
@@ -444,7 +444,7 @@ export default function BoardEditor({ board }: Props) {
                           <textarea
                             value={ts.dinkItemsText}
                             onChange={(e) => updateTier(selected, tierKey, "dinkItemsText", e.target.value)}
-                            rows={6}
+                            rows={5}
                             placeholder={"4151 Abyssal whip\n12073 Twisted bow"}
                             className={`${inputCls} font-mono resize-y text-xs`}
                           />
@@ -457,7 +457,7 @@ export default function BoardEditor({ board }: Props) {
               </div>
 
               {/* Image */}
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-1.5">
                 <label className={labelCls}>Tile image (optional)</label>
                 {cropSrc?.pos === selected ? (
                   <ImageCropper imageSrc={cropSrc.src} onDone={onCropDone} onCancel={onCropCancel} />
@@ -479,7 +479,7 @@ export default function BoardEditor({ board }: Props) {
                         </button>
                       </div>
                     )}
-                    <label className={`flex items-center justify-center gap-2 border-2 border-dashed border-purple-900/50 hover:border-purple-700/60 rounded-lg py-3 text-sm text-purple-500 cursor-pointer transition-colors ${imageUploading ? "opacity-50 pointer-events-none" : ""}`}>
+                    <label className={`flex items-center justify-center gap-2 border-2 border-dashed border-purple-900/50 hover:border-purple-700/60 rounded-lg py-2 text-sm text-purple-500 cursor-pointer transition-colors ${imageUploading ? "opacity-50 pointer-events-none" : ""}`}>
                       <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) onFileSelected(selected, f); e.target.value = ""; }} />
                       {imageUploading ? "Uploading…" : selectedTile!.imageUrl ? "Replace image" : "Upload image"}
                     </label>
@@ -496,7 +496,7 @@ export default function BoardEditor({ board }: Props) {
       <button
         onClick={saveBoard}
         disabled={saving || !boardName.trim()}
-        className="self-start bg-purple-700 hover:bg-purple-600 disabled:opacity-50 text-white font-semibold rounded-lg px-6 py-2.5 transition-colors purple-glow-sm"
+        className="self-start bg-purple-700 hover:bg-purple-600 disabled:opacity-50 text-white font-semibold rounded-lg px-5 py-2 transition-colors purple-glow-sm"
       >
         {saving ? "Saving…" : board ? "Save changes" : "Create board"}
       </button>

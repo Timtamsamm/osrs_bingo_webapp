@@ -167,7 +167,7 @@ export default function TeamsEditor({ teams: initialTeams, members }: Props) {
 
       {/* Team list */}
       {teams.map((team) => (
-        <div key={team.id} className="bg-[#0e0820] border border-purple-900/40 rounded-xl overflow-hidden">
+        <div key={team.id} className="bg-[#0e0820] border border-purple-900/40 rounded-xl">
           {/* Team header */}
           <div className="flex items-center gap-3 px-5 py-4 border-b border-purple-900/40">
             {isEditing(team.id) ? (
