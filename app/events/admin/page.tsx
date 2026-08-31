@@ -3,16 +3,19 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { fetchGroupMembers } from "@/lib/wiseoldman";
+import { getSettings } from "@/lib/settings";
 import EventsEditor from "./EventsEditor";
+import DiscordSettingsForm from "./DiscordSettingsForm";
 
 export default async function EventsAdminPage() {
   const session = await auth();
   if (!session) redirect("/login");
   if (session.user.role !== "ADMIN") redirect("/");
 
-  const [events, members] = await Promise.all([
+  const [events, members, settings] = await Promise.all([
     prisma.event.findMany({ orderBy: { startsAt: "desc" } }),
     fetchGroupMembers(),
+    getSettings(),
   ]);
   const serialized = events.map((e) => ({
     id: e.id,
@@ -42,6 +45,9 @@ export default async function EventsAdminPage() {
               ← Home
             </Link>
           </div>
+        </div>
+        <div className="mb-6">
+          <DiscordSettingsForm initialWebhookUrl={settings?.discordWebhookUrl ?? null} />
         </div>
         <EventsEditor events={serialized} members={members} />
       </div>

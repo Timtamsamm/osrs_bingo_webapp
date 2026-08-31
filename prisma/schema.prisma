@@ -155,6 +155,11 @@ model Submission {
 
 // ── Events ─────────────────────────────────────────────────────────────────
 
+model Settings {
+  id                String  @id
+  discordWebhookUrl String? // posts an announcement embed here when an event is created
+}
+
 model Event {
   id               String   @id @default(cuid())
   title            String
