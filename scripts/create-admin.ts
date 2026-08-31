@@ -13,7 +13,8 @@ import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
 
-const [, , username, password] = process.argv;
+const [, , rawUsername, password] = process.argv;
+const username = rawUsername?.trim().toLowerCase();
 
 if (!username || !password) {
   console.error("Usage: npx tsx scripts/create-admin.ts <username> <password>");

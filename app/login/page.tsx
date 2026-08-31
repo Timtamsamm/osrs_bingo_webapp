@@ -19,7 +19,7 @@ export default function LoginPage() {
   async function handleSignIn(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
-    const username = (form.get("username") as string).trim();
+    const username = (form.get("username") as string).trim().toLowerCase();
     const password = form.get("password") as string;
 
     const errors = { username: "", password: "" };
@@ -33,7 +33,7 @@ export default function LoginPage() {
     setLoading(false);
 
     if (result?.error) {
-      setError("Incorrect username or password.");
+      setError("Login failed — incorrect username or password. Double-check for typos and try again.");
     } else {
       router.push("/bingo/admin");
     }
@@ -57,7 +57,7 @@ export default function LoginPage() {
 
         <div className="text-center mb-8">
           <h1 className="font-[family-name:var(--font-cinzel)] text-3xl font-black text-white heading-glow mb-1">
-            OSRS Bingo
+            Wong Tongs
           </h1>
           <p className="text-purple-500 text-sm">Admin access</p>
         </div>
@@ -91,7 +91,8 @@ export default function LoginPage() {
             </div>
 
             {error && (
-              <div className="bg-red-950/40 border border-red-800/50 rounded-lg px-3 py-2">
+              <div className="bg-red-950/40 border border-red-800/50 rounded-lg px-3 py-2 flex items-start gap-2">
+                <span className="text-red-400 shrink-0">⚠</span>
                 <p className="text-sm text-red-400">{error}</p>
               </div>
             )}
