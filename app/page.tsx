@@ -3,25 +3,10 @@ import Image from "next/image";
 
 type SectionStatus = "live" | "soon";
 
-const sections: { href: string; title: string; description: string; status: SectionStatus }[] = [
-  {
-    href: "/bingo",
-    title: "Bingo",
-    description: "Live board, teams, and player stats for the current event.",
-    status: "live",
-  },
-  {
-    href: "/events",
-    title: "Events",
-    description: "Active, upcoming, and past clan events.",
-    status: "live",
-  },
-  {
-    href: "/members",
-    title: "Members",
-    description: "Clan roster with EHP/EHB and TempleOSRS stats.",
-    status: "live",
-  },
+const sections: { href: string; title: string; status: SectionStatus }[] = [
+  { href: "/bingo", title: "Bingo", status: "live" },
+  { href: "/events", title: "Events", status: "live" },
+  { href: "/members", title: "Members", status: "live" },
 ];
 
 export default function HomePage() {
@@ -48,23 +33,20 @@ export default function HomePage() {
               key={s.href}
               href={s.href}
               aria-disabled={s.status === "soon"}
-              className={`group rounded-2xl border p-6 transition-all ${
+              className={`group rounded-2xl border p-6 flex flex-col items-center justify-center gap-1.5 transition-all ${
                 s.status === "soon"
                   ? "border-purple-900/30 bg-[#0e0820]/50 pointer-events-none opacity-60"
                   : "border-purple-900/40 bg-[#0e0820] hover:border-purple-500/50 purple-glow-sm hover:purple-glow-sm"
               }`}
             >
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="font-[family-name:var(--font-cinzel)] text-xl font-bold text-white">
-                  {s.title}
-                </h2>
-                {s.status === "soon" && (
-                  <span className="text-[10px] uppercase tracking-widest text-purple-600 border border-purple-900/50 rounded-full px-2 py-0.5">
-                    Soon
-                  </span>
-                )}
-              </div>
-              <p className="text-sm text-purple-500/80">{s.description}</p>
+              <h2 className="font-[family-name:var(--font-cinzel)] text-xl font-bold text-white">
+                {s.title}
+              </h2>
+              {s.status === "soon" && (
+                <span className="text-[10px] uppercase tracking-widest text-purple-600 border border-purple-900/50 rounded-full px-2 py-0.5">
+                  Soon
+                </span>
+              )}
             </Link>
           ))}
         </div>
