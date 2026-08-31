@@ -12,6 +12,7 @@ export default function BoardTabNav() {
         <TabLink href="/bingo/board" active={pathname === "/bingo/board"}>Board</TabLink>
         <TabLink href="/bingo/teams" active={pathname === "/bingo/teams" || pathname.startsWith("/bingo/team/")}>Teams</TabLink>
         <TabLink href="/bingo/players" active={pathname === "/bingo/players"}>Players</TabLink>
+        <TabLink href="/bingo/recent-drops" active={pathname === "/bingo/recent-drops"}>Recent Drops</TabLink>
       </div>
     </div>
   );

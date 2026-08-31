@@ -464,7 +464,7 @@ export default function BoardEditor({ board }: Props) {
                 ) : (
                   <>
                     {selectedTile!.imageUrl && (
-                      <div className="relative w-full aspect-square rounded-lg overflow-hidden bg-[#130a28]">
+                      <div className="relative w-full max-w-[200px] aspect-square rounded-lg overflow-hidden bg-[#130a28]">
                         <Image src={selectedTile!.imageUrl} alt="Tile" fill sizes="400px" className="object-cover" />
                         <button
                           type="button"

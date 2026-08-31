@@ -52,5 +52,6 @@ export async function POST(req: NextRequest) {
   revalidatePath("/bingo/admin/submissions");
   revalidatePath("/bingo/board");
   revalidatePath("/bingo/leaderboard");
+  revalidatePath("/bingo/recent-drops");
   return NextResponse.json(submission);
 }
