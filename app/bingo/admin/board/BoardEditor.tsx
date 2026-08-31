@@ -109,9 +109,9 @@ const inputCls = "bg-[#130a28] border border-purple-900/50 rounded-lg px-2.5 py-
 const labelCls = "text-xs text-purple-400 font-medium";
 
 const TIER_META: Record<"t1" | "t2" | "t3", { num: 1 | 2 | 3; label: string; hint: string }> = {
-  t3: { num: 3, label: "T3 — Easiest", hint: "Fewest/simplest drops" },
-  t2: { num: 2, label: "T2 — Medium", hint: "" },
-  t1: { num: 1, label: "T1 — Hardest", hint: "Most valuable drops" },
+  t3: { num: 3, label: "T3", hint: "Fewest/simplest drops" },
+  t2: { num: 2, label: "T2", hint: "" },
+  t1: { num: 1, label: "T1", hint: "Most valuable drops" },
 };
 
 export default function BoardEditor({ board }: Props) {

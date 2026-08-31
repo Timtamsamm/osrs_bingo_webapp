@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getSettings } from "@/lib/settings";
-import { postEventAnnouncement } from "@/lib/discord";
+import { postEventAnnouncement, createDiscordScheduledEvent } from "@/lib/discord";
 
 async function requireAdmin() {
   const session = await auth();
@@ -37,15 +37,17 @@ export async function POST(req: NextRequest) {
   });
 
   const settings = await getSettings();
+  const announcement = {
+    title: event.title,
+    description: event.description,
+    imageUrl: event.imageUrl,
+    startsAt: event.startsAt,
+    endsAt: event.endsAt,
+  };
   if (settings?.discordWebhookUrl) {
-    await postEventAnnouncement(settings.discordWebhookUrl, {
-      title: event.title,
-      description: event.description,
-      imageUrl: event.imageUrl,
-      startsAt: event.startsAt,
-      endsAt: event.endsAt,
-    });
+    await postEventAnnouncement(settings.discordWebhookUrl, announcement);
   }
+  await createDiscordScheduledEvent(announcement);
 
   return NextResponse.json(event);
 }

@@ -211,8 +211,6 @@ function LineIndicator({
   );
 }
 
-const TIER_LABEL: Record<number, string> = { 1: "Hardest", 2: "Medium", 3: "Easiest" };
-
 function TileDetailModal({ tile, teams, onClose }: { tile: TileSummary; teams: TeamInfo[]; onClose: () => void }) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -273,7 +271,6 @@ function TileDetailModal({ tile, teams, onClose }: { tile: TileSummary; teams: T
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <span className="text-sm font-bold text-purple-100">T{td.tier}</span>
-                      <span className="text-xs text-purple-600 ml-1.5">({TIER_LABEL[td.tier] ?? "—"})</span>
                     </div>
                     <div className="text-right shrink-0">
                       <span className="text-sm font-semibold text-white">{+td.points.toFixed(1)} pts</span>
