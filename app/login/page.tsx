@@ -2,11 +2,9 @@
 
 import { useState } from "react";
 import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [fieldErrors, setFieldErrors] = useState({ username: "", password: "" });
@@ -35,7 +33,12 @@ export default function LoginPage() {
     if (result?.error) {
       setError("Login failed — incorrect username or password. Double-check for typos and try again.");
     } else {
-      router.push("/bingo/admin");
+      // A full navigation (not router.push) so the freshly-set session
+      // cookie is guaranteed to be sent on the very next request — a
+      // client-side soft navigation right after signIn can race ahead of
+      // the cookie settling, especially on mobile, silently bouncing back
+      // to /login with no visible error.
+      window.location.href = "/bingo/admin";
     }
   }
 

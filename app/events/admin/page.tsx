@@ -6,6 +6,7 @@ import { fetchGroupMembers } from "@/lib/wiseoldman";
 import { getSettings } from "@/lib/settings";
 import EventsEditor from "./EventsEditor";
 import DiscordSettingsForm from "./DiscordSettingsForm";
+import LogoutButton from "@/app/components/LogoutButton";
 
 export default async function EventsAdminPage() {
   const session = await auth();
@@ -30,20 +31,21 @@ export default async function EventsAdminPage() {
   return (
     <div className="min-h-screen bg-[#080510] text-white">
       <div className="max-w-3xl mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-8">
           <div>
             <p className="text-[10px] text-purple-600 uppercase tracking-widest mb-1">Admin</p>
             <h1 className="font-[family-name:var(--font-cinzel)] text-2xl font-bold text-purple-100 heading-glow">
               Events
             </h1>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-4">
             <Link href="/events" className="text-xs text-purple-500 hover:text-purple-300 transition-colors font-medium">
               ← Back to events
             </Link>
             <Link href="/" className="text-xs text-purple-500 hover:text-purple-300 transition-colors font-medium">
               ← Home
             </Link>
+            <LogoutButton className="text-xs text-purple-500 hover:text-red-400 transition-colors font-medium" />
           </div>
         </div>
         <div className="mb-6">
