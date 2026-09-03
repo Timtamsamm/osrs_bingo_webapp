@@ -3,11 +3,11 @@ export const dynamic = "force-dynamic";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
 import { fetchTeamStats, ensureTempleSnapshotTaken, type TempleSnapshotEntry, type TempleStats } from "@/lib/templeosrs";
 import TeamProgressChart from "./TeamProgressChart";
 import TeamBoardGrid from "./TeamBoardGrid";
 import BoardTabNav from "@/app/components/BoardTabNav";
+import ZoomableThumbnail from "@/app/components/ZoomableThumbnail";
 import { computeStandings, bonusPts, getRows, getCols, type TierDef, type BonusConfig } from "@/lib/scoring";
 
 interface PointEvent {
@@ -283,11 +283,7 @@ export default async function TeamPage({ params }: Props) {
                 const tileTitle = allTileTitleById.get(s.tileId) ?? "Tile";
                 return (
                   <div key={s.id} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-[#130a28]/60">
-                    {s.imageUrl && (
-                      <div className="relative w-10 h-10 rounded overflow-hidden shrink-0 bg-black/30">
-                        <Image src={s.imageUrl} alt="" fill sizes="40px" className="object-cover" />
-                      </div>
-                    )}
+                    {s.imageUrl && <ZoomableThumbnail src={s.imageUrl} />}
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-purple-100 truncate">
                         {tileTitle}{" "}

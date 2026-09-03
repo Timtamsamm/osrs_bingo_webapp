@@ -1,7 +1,7 @@
 import Link from "next/link";
-import Image from "next/image";
 import { prisma } from "@/lib/prisma";
 import BoardTabNav from "@/app/components/BoardTabNav";
+import ZoomableThumbnail from "@/app/components/ZoomableThumbnail";
 
 const DROPS_LIMIT = 100;
 
@@ -59,11 +59,7 @@ export default async function RecentDropsPage() {
             <div className="flex flex-col gap-2">
               {drops.map((d) => (
                 <div key={d.id} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-[#130a28]/60">
-                  {d.imageUrl && (
-                    <div className="relative w-10 h-10 rounded overflow-hidden shrink-0 bg-black/30">
-                      <Image src={d.imageUrl} alt="" fill sizes="40px" className="object-cover" />
-                    </div>
-                  )}
+                  {d.imageUrl && <ZoomableThumbnail src={d.imageUrl} />}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-purple-100 truncate">
                       {d.tile.title}{" "}
