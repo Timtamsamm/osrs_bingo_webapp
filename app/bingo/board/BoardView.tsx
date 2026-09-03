@@ -15,6 +15,7 @@ export type TileTier = {
   points: number;
   requiredCount: number;
   description: string | null;
+  items: string[];
 };
 
 export type TileSummary = {
@@ -211,6 +212,12 @@ function LineIndicator({
   );
 }
 
+const TIER_ACCENT: Record<number, string> = {
+  1: "border-l-amber-500",
+  2: "border-l-purple-500",
+  3: "border-l-emerald-500",
+};
+
 function TileDetailModal({ tile, teams, onClose }: { tile: TileSummary; teams: TeamInfo[]; onClose: () => void }) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -237,7 +244,7 @@ function TileDetailModal({ tile, teams, onClose }: { tile: TileSummary; teams: T
         onClick={(e) => e.stopPropagation()}
       >
         {tile.imageUrl && (
-          <div className="relative w-full aspect-video overflow-hidden">
+          <div className="relative w-full h-32 overflow-hidden">
             <Image src={tile.imageUrl} alt={tile.title} fill sizes="400px" className="object-cover" />
             <div className="absolute inset-0 bg-gradient-to-t from-[#0e0820] via-transparent to-transparent" />
           </div>
@@ -256,7 +263,12 @@ function TileDetailModal({ tile, teams, onClose }: { tile: TileSummary; teams: T
             </button>
           </div>
 
-          {tile.description && <p className="text-sm text-purple-300/80">{tile.description}</p>}
+          {tile.description && (
+            <div className="flex flex-col gap-1">
+              <p className="text-xs tracking-[0.2em] text-purple-500 uppercase font-semibold">Tile Objective</p>
+              <p className="text-sm text-purple-300/80">{tile.description}</p>
+            </div>
+          )}
 
           <div className="flex flex-col gap-2">
             <p className="text-xs tracking-[0.2em] text-purple-500 uppercase font-semibold">Tiers</p>
@@ -266,18 +278,25 @@ function TileDetailModal({ tile, teams, onClose }: { tile: TileSummary; teams: T
               sortedTiers.map((td) => (
                 <div
                   key={td.tier}
-                  className="flex flex-col gap-1 px-3 py-2 rounded-lg bg-[#130a28]/60 border border-purple-900/30"
+                  className={`flex flex-col gap-1.5 px-3 py-2.5 rounded-lg bg-[#130a28]/60 border-l-4 border-y border-r border-y-purple-900/30 border-r-purple-900/30 ${TIER_ACCENT[td.tier] ?? "border-l-purple-700"}`}
                 >
                   <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <span className="text-sm font-bold text-purple-100">T{td.tier}</span>
-                    </div>
+                    <span className="text-sm font-bold text-purple-100">T{td.tier}</span>
                     <div className="text-right shrink-0">
                       <span className="text-sm font-semibold text-white">{+td.points.toFixed(1)} pts</span>
                       <span className="text-xs text-purple-500 ml-2">{td.requiredCount}× required</span>
                     </div>
                   </div>
-                  {td.description && <p className="text-xs text-purple-400/80 whitespace-pre-line">{td.description}</p>}
+                  {td.description && <p className="text-xs text-purple-400/70 whitespace-pre-line">{td.description}</p>}
+                  {td.items.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {td.items.map((name) => (
+                        <span key={name} className="text-xs text-purple-200 bg-purple-900/40 border border-purple-700/30 rounded-full px-2 py-0.5">
+                          {name}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))
             )}
