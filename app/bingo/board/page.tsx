@@ -6,10 +6,10 @@ import BoardTabNav from "@/app/components/BoardTabNav";
 import Countdown from "@/app/components/Countdown";
 import BoardView from "./BoardView";
 import type { TileSummary, LineSummary, BonusConfig } from "./BoardView";
-import { computeStandings, getLineBonusTier, getRows, getCols, pointsNominalMax, pointsTileProgress, type TierDef, type PointsConfig } from "@/lib/scoring";
+import { computeStandings, getLineBonusTier, getRows, getCols, pointsNominalMax, pointsTileProgress, scaledRequirement, scaleFactorFor, normalizedTeamSize, type TierDef, type PointsConfig } from "@/lib/scoring";
 
 export default async function BoardPage() {
-  const [board, teams] = await Promise.all([
+  const [board, rawTeams] = await Promise.all([
     prisma.bingoBoard.findFirst({
       where: { active: true },
       include: {
@@ -24,8 +24,16 @@ export default async function BoardPage() {
         },
       },
     }),
-    prisma.team.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, color: true } }),
+    prisma.team.findMany({
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, color: true, _count: { select: { participants: true } } },
+    }),
   ]);
+
+  const teams = rawTeams.map((t) => ({ id: t.id, name: t.name, color: t.color, size: t._count.participants }));
+  const scaleByTeamSize = board?.scaleByTeamSize ?? false;
+  const maxTeamSize = scaleByTeamSize ? Math.max(1, ...teams.map((t) => normalizedTeamSize(t.size))) : 1;
+  const scaleFactorByTeam = new Map(teams.map((t) => [t.id, scaleByTeamSize ? scaleFactorFor(normalizedTeamSize(t.size), maxTeamSize) : 1]));
 
   const size = board?.size ?? 5;
   const rawBonuses = board?.rowColBonuses as { t1?: number; t2?: number; t3?: number } | null;
@@ -49,7 +57,7 @@ export default async function BoardPage() {
       submissions: tile.submissions,
     }));
 
-  const { standings: teamList, totalPoints, totalTiles } = computeStandings(scoringTiles, teams, bonusConfig, size);
+  const { standings: teamList, totalPoints, totalTiles } = computeStandings(scoringTiles, teams, bonusConfig, size, scaleByTeamSize);
   const boardTileById = new Map((board?.tiles ?? []).map((t) => [t.id, t]));
 
   const tiles: TileSummary[] = scoringTiles.map((tile) => {
@@ -78,9 +86,10 @@ export default async function BoardPage() {
       imageUrl: boardTile.imageUrl,
       teamStatuses: teams.map((team) => {
         const teamSubs = tile.submissions.filter((s) => s.teamId === team.id && s.status === "APPROVED");
+        const scaleFactor = scaleFactorByTeam.get(team.id) ?? 1;
 
         if (isPoints) {
-          const { earned, completed, receivedItemIds } = pointsTileProgress(pointsConfig!, teamSubs);
+          const { earned, completed, receivedItemIds } = pointsTileProgress(pointsConfig!, teamSubs, scaleFactor);
           return {
             teamId: team.id,
             completed,
@@ -92,7 +101,7 @@ export default async function BoardPage() {
         }
 
         const achievedTiers = tile.tiers
-          .filter((td) => teamSubs.filter((s) => s.tier === td.tier).length >= td.requiredCount)
+          .filter((td) => teamSubs.filter((s) => s.tier === td.tier).length >= scaledRequirement(td.requiredCount, scaleFactor))
           .map((td) => td.tier);
         return {
           teamId: team.id,
@@ -109,7 +118,7 @@ export default async function BoardPage() {
     index: i,
     statuses: teams.map((team) => ({
       teamId: team.id,
-      bonusTier: getLineBonusTier(scoringTiles, positions, team.id),
+      bonusTier: getLineBonusTier(scoringTiles, positions, team.id, scaleFactorByTeam.get(team.id) ?? 1),
     })),
   }));
 
@@ -117,7 +126,7 @@ export default async function BoardPage() {
     index: i,
     statuses: teams.map((team) => ({
       teamId: team.id,
-      bonusTier: getLineBonusTier(scoringTiles, positions, team.id),
+      bonusTier: getLineBonusTier(scoringTiles, positions, team.id, scaleFactorByTeam.get(team.id) ?? 1),
     })),
   }));
 
@@ -159,6 +168,11 @@ export default async function BoardPage() {
             <div className="mt-4">
               <Countdown endsAt={board.endsAt.toISOString()} label="Ends in" />
             </div>
+          )}
+          {scaleByTeamSize && (
+            <p className="text-[11px] text-purple-600/70 mt-2">
+              Team-size scaling is on — smaller teams need proportionally fewer drops/points to complete a tile.
+            </p>
           )}
           <div className="absolute left-0 top-0">
             <Link href="/" className="text-xs text-purple-500 hover:text-purple-300 transition-colors font-medium">
@@ -225,6 +239,7 @@ export default async function BoardPage() {
             colSummaries={colSummaries}
             bonusConfig={bonusConfig}
             size={size}
+            scaleByTeamSize={scaleByTeamSize}
           />
         )}
       </div>

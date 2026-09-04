@@ -8,7 +8,7 @@ import TeamProgressChart from "./TeamProgressChart";
 import TeamBoardGrid from "./TeamBoardGrid";
 import BoardTabNav from "@/app/components/BoardTabNav";
 import ZoomableThumbnail from "@/app/components/ZoomableThumbnail";
-import { computeStandings, bonusPts, getRows, getCols, pointsNominalMax, type TierDef, type BonusConfig, type PointsConfig } from "@/lib/scoring";
+import { computeStandings, bonusPts, getRows, getCols, pointsNominalMax, scaledRequirement, scaleFactorFor, normalizedTeamSize, type TierDef, type BonusConfig, type PointsConfig } from "@/lib/scoring";
 
 interface PointEvent {
   date: Date;
@@ -36,6 +36,7 @@ export default async function TeamPage({ params }: Props) {
         startsAt: true,
         rowColBonuses: true,
         size: true,
+        scaleByTeamSize: true,
         tiles: {
           orderBy: { position: "asc" },
           select: {
@@ -54,10 +55,14 @@ export default async function TeamPage({ params }: Props) {
         },
       },
     }),
-    prisma.team.findMany({ select: { id: true, name: true, color: true } }),
+    prisma.team.findMany({ select: { id: true, name: true, color: true, _count: { select: { participants: true } } } }),
   ]);
 
   if (!team) notFound();
+
+  const scaleByTeamSize = board?.scaleByTeamSize ?? false;
+  const maxTeamSize = scaleByTeamSize ? Math.max(1, ...allTeams.map((t) => normalizedTeamSize(t._count.participants))) : 1;
+  const scaleFactor = scaleByTeamSize ? scaleFactorFor(normalizedTeamSize(team.participants.length), maxTeamSize) : 1;
 
   const submissions = board
     ? await prisma.submission.findMany({
@@ -128,6 +133,9 @@ export default async function TeamPage({ params }: Props) {
       if (!cfg) continue;
       const hasTarget = cfg.target != null;
 
+      // Note: the *cap* on earned points always uses the original target
+      // (a completed tile is worth the same to every team) — only the
+      // *completion threshold* below scales down for smaller teams.
       const prevTotal = pointsTotalByTile.get(sub.tileId) ?? 0;
       if (hasTarget && prevTotal >= cfg.target!) continue;
       const newTotal = hasTarget ? Math.min(prevTotal + sub.pointsAwarded, cfg.target!) : prevTotal + sub.pointsAwarded;
@@ -146,9 +154,12 @@ export default async function TeamPage({ params }: Props) {
         events.push({ date: sub.createdAt, delta, label: `${tile?.title ?? "Tile"} (+${+delta.toFixed(1)}pts)` });
       }
 
+      // Count only items still in the tile's current config — one removed
+      // after a team already received it shouldn't keep counting.
+      const receivedFromCurrentItems = cfg.items.filter((i) => itemsReceivedByTile.get(sub.tileId)!.has(i.id)).length;
       const isComplete = hasTarget
-        ? newTotal >= cfg.target!
-        : cfg.items.length > 0 && cfg.items.every((i) => itemsReceivedByTile.get(sub.tileId)?.has(i.id));
+        ? newTotal >= Math.max(0.01, cfg.target! * scaleFactor)
+        : cfg.items.length > 0 && receivedFromCurrentItems >= scaledRequirement(cfg.items.length, scaleFactor);
 
       if (isComplete) {
         // Treat completion as equivalent to a T1 completion for line-bonus
@@ -165,7 +176,7 @@ export default async function TeamPage({ params }: Props) {
       const key = `${sub.tileId}:${sub.tier}`;
       const newCount = (countByTileTier.get(key) ?? 0) + 1;
       countByTileTier.set(key, newCount);
-      if (newCount !== tierDef.requiredCount) continue;
+      if (newCount !== scaledRequirement(tierDef.requiredCount, scaleFactor)) continue;
 
       tile = tileById.get(sub.tileId);
       runningTotal += tierDef.points;
@@ -214,7 +225,8 @@ export default async function TeamPage({ params }: Props) {
     pointsConfig: t.pointsConfig as PointsConfig | null,
     submissions: t.submissions,
   }));
-  const { standings } = computeStandings(scoringTiles, allTeams, bonusConfig, size);
+  const allTeamsForScoring = allTeams.map((t) => ({ id: t.id, name: t.name, color: t.color, size: t._count.participants }));
+  const { standings } = computeStandings(scoringTiles, allTeamsForScoring, bonusConfig, size, scaleByTeamSize);
   const rank = standings.findIndex((s) => s.id === team.id) + 1;
 
   if (board) await ensureTempleSnapshotTaken(board.id, board.startsAt);

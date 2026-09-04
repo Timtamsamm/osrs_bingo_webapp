@@ -5,7 +5,7 @@ import { Prisma } from "@prisma/client";
 
 type DinkItem = { id: number; name: string };
 type TierDef = { tier: 1 | 2 | 3; points: number; requiredCount: number; description?: string; dinkItems: DinkItem[] };
-type PointsConfig = { target: number; items: Array<{ id: number; name: string; basePoints: number }> };
+type PointsConfig = { target?: number; items: Array<{ id: number; name: string; basePoints: number }> };
 type TileInput = {
   title: string;
   description: string;
@@ -24,7 +24,7 @@ async function requireAdmin() {
 export async function POST(req: NextRequest) {
   if (!await requireAdmin()) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const { name, description, startsAt, endsAt, size, dinkToken, rowColBonuses, tiles } = await req.json();
+  const { name, description, startsAt, endsAt, size, dinkToken, rowColBonuses, scaleByTeamSize, tiles } = await req.json();
   if (!name?.trim()) return NextResponse.json({ error: "Name required" }, { status: 400 });
 
   await prisma.bingoBoard.updateMany({ where: { active: true }, data: { active: false } });
@@ -38,6 +38,7 @@ export async function POST(req: NextRequest) {
       size: size ? Number(size) : 5,
       dinkToken: dinkToken?.trim() || null,
       rowColBonuses: rowColBonuses ?? { t1: 0, t2: 0, t3: 0 },
+      scaleByTeamSize: !!scaleByTeamSize,
       active: true,
       tiles: {
         create: Object.entries(tiles as Record<string, TileInput>)
@@ -61,7 +62,7 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   if (!await requireAdmin()) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const { id, name, description, startsAt, endsAt, size, dinkToken, rowColBonuses, tiles } = await req.json();
+  const { id, name, description, startsAt, endsAt, size, dinkToken, rowColBonuses, scaleByTeamSize, tiles } = await req.json();
   if (!id || !name?.trim()) return NextResponse.json({ error: "Missing fields" }, { status: 400 });
 
   await prisma.bingoBoard.update({
@@ -74,6 +75,7 @@ export async function PUT(req: NextRequest) {
       size: size ? Number(size) : 5,
       dinkToken: dinkToken?.trim() || null,
       rowColBonuses: rowColBonuses ?? { t1: 0, t2: 0, t3: 0 },
+      scaleByTeamSize: !!scaleByTeamSize,
     },
   });
 

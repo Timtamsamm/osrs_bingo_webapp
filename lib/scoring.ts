@@ -23,6 +23,32 @@ export function diminishingPoints(basePoints: number, occurrence: number): numbe
   return basePoints / Math.pow(2, cappedOccurrence - 1);
 }
 
+/**
+ * Team-size scaling (opt-in per board, see BingoBoard.scaleByTeamSize):
+ * smaller teams need proportionally fewer drops/points to *complete* a
+ * tile, relative to the board's biggest team — but the reward for
+ * completing it is always the same regardless of size. scaleFactor is
+ * `thisTeamSize / biggestTeamSize`, clamped to (0, 1]; 1 means no scaling
+ * (the default/disabled case).
+ */
+export function scaledRequirement(original: number, scaleFactor: number): number {
+  return Math.max(1, Math.round(original * scaleFactor));
+}
+
+export function scaleFactorFor(teamSize: number, maxTeamSize: number): number {
+  if (maxTeamSize <= 0 || teamSize <= 0) return 1;
+  return Math.min(1, teamSize / maxTeamSize);
+}
+
+/** Normalizes a team's participant count for scaling purposes — an empty
+ * team (0 participants, or size not provided) is treated as size 1 rather
+ * than being excluded, so it doesn't skew maxTeamSize or divide by zero.
+ * Every caller that builds a TeamForScoring or computes scale factors
+ * should go through this so they can never disagree with each other. */
+export function normalizedTeamSize(size: number | undefined | null): number {
+  return size || 1;
+}
+
 export interface TileForScoring {
   id: string;
   position: number;
@@ -37,6 +63,7 @@ export interface TeamForScoring {
   id: string;
   name: string;
   color: string;
+  size?: number; // participant count — only needed when the board has scaleByTeamSize on
 }
 
 export interface TeamStanding {
@@ -72,34 +99,43 @@ function isConfiguredTile(t: TileForScoring | undefined): t is TileForScoring {
 /** A points tile's nominal "max" value — its target if it has one, or the
  * sum of every item's base value (i.e. one of each) when uncapped. Used for
  * the board's overall total-points denominator; an uncapped tile can still
- * earn more than this via duplicates. */
+ * earn more than this via duplicates. Never scaled by team size — every
+ * team's tile is nominally "worth" the same amount. */
 export function pointsNominalMax(cfg: PointsConfig): number {
   if (cfg.target != null) return cfg.target;
   return cfg.items.reduce((sum, i) => sum + i.basePoints, 0);
 }
 
 /** A team's progress on one points-mode tile: earned points (capped at the
- * target if one is set, otherwise uncapped) and whether it's complete
- * (reached the target, or — with no target — received at least one of
- * every listed item). */
+ * *original* target if one is set, otherwise uncapped — never scaled, so
+ * completing a tile is worth the same to every team) and whether it's
+ * complete. Completion itself uses a scaled-down threshold for smaller
+ * teams when scaleFactor < 1: a lower point total, or fewer distinct items
+ * out of the full list, needed to count as done. */
 export function pointsTileProgress(
   cfg: PointsConfig,
-  teamSubs: Array<{ pointsAwarded: number | null; dinkItemId: number | null }>
+  teamSubs: Array<{ pointsAwarded: number | null; dinkItemId: number | null }>,
+  scaleFactor: number = 1
 ): { earned: number; completed: boolean; receivedItemIds: Set<number> } {
   const total = teamSubs.reduce((sum, s) => sum + (s.pointsAwarded ?? 0), 0);
   const receivedItemIds = new Set(teamSubs.map((s) => s.dinkItemId).filter((id): id is number => id != null));
 
   if (cfg.target != null) {
     const earned = Math.min(total, cfg.target);
-    return { earned, completed: earned >= cfg.target, receivedItemIds };
+    const completionThreshold = Math.max(0.01, cfg.target * scaleFactor);
+    return { earned, completed: total >= completionThreshold, receivedItemIds };
   }
 
-  const completed = cfg.items.length > 0 && cfg.items.every((i) => receivedItemIds.has(i.id));
+  // Count only current items — an item removed from cfg after a team
+  // already received it shouldn't keep counting toward completion.
+  const receivedFromCurrentItems = cfg.items.filter((i) => receivedItemIds.has(i.id)).length;
+  const neededItems = scaledRequirement(cfg.items.length, scaleFactor);
+  const completed = cfg.items.length > 0 && receivedFromCurrentItems >= neededItems;
   return { earned: total, completed, receivedItemIds };
 }
 
 /** The bonus tier a team has earned for a row/column (null = line not complete). */
-export function getLineBonusTier(tiles: TileForScoring[], positions: number[], teamId: string): number | null {
+export function getLineBonusTier(tiles: TileForScoring[], positions: number[], teamId: string, scaleFactor: number = 1): number | null {
   const tileByPos = new Map(tiles.map((t) => [t.position, t]));
   const tilesInLine = positions.map((p) => tileByPos.get(p));
   if (tilesInLine.some((t) => !isConfiguredTile(t))) return null;
@@ -111,12 +147,12 @@ export function getLineBonusTier(tiles: TileForScoring[], positions: number[], t
       // A points tile has one completion state, not discrete tiers — treat
       // completing it as equivalent to the best (T1) tier for line bonus
       // purposes.
-      const { completed } = pointsTileProgress(tile!.pointsConfig, teamSubs);
+      const { completed } = pointsTileProgress(tile!.pointsConfig, teamSubs, scaleFactor);
       return completed ? 1 : null;
     }
 
     const achieved = tile!.tiers
-      .filter((td) => teamSubs.filter((s) => s.tier === td.tier).length >= td.requiredCount)
+      .filter((td) => teamSubs.filter((s) => s.tier === td.tier).length >= scaledRequirement(td.requiredCount, scaleFactor))
       .map((td) => td.tier);
     return achieved.length > 0 ? Math.min(...achieved) : null;
   });
@@ -129,14 +165,17 @@ export function computeStandings(
   allTiles: TileForScoring[],
   teams: TeamForScoring[],
   bonusConfig: BonusConfig,
-  size: number
+  size: number,
+  scaleByTeamSize: boolean = false
 ): { standings: TeamStanding[]; totalPoints: number; totalTiles: number } {
   // Tiles left over from a larger board size are ignored, not deleted — see getRows/getCols.
   const tiles = allTiles.filter((t) => t.position < size * size);
   const rows = getRows(size);
   const cols = getCols(size);
+  const maxTeamSize = scaleByTeamSize ? Math.max(1, ...teams.map((t) => normalizedTeamSize(t.size))) : 1;
 
   const standings: TeamStanding[] = teams.map((team) => {
+    const scaleFactor = scaleByTeamSize ? scaleFactorFor(normalizedTeamSize(team.size), maxTeamSize) : 1;
     let earnedPoints = 0;
     let completedTiles = 0;
 
@@ -144,7 +183,7 @@ export function computeStandings(
       const teamSubs = tile.submissions.filter((s) => s.teamId === team.id && s.status === "APPROVED");
 
       if (tile.scoringMode === "POINTS" && tile.pointsConfig) {
-        const { earned, completed } = pointsTileProgress(tile.pointsConfig, teamSubs);
+        const { earned, completed } = pointsTileProgress(tile.pointsConfig, teamSubs, scaleFactor);
         earnedPoints += earned;
         if (completed) completedTiles++;
         continue;
@@ -152,16 +191,16 @@ export function computeStandings(
 
       for (const tierDef of tile.tiers) {
         const approvedForTier = teamSubs.filter((s) => s.tier === tierDef.tier).length;
-        if (approvedForTier >= tierDef.requiredCount) earnedPoints += tierDef.points;
+        if (approvedForTier >= scaledRequirement(tierDef.requiredCount, scaleFactor)) earnedPoints += tierDef.points;
       }
       const t1 = tile.tiers.find((t) => t.tier === 1);
-      if (t1 && teamSubs.filter((s) => s.tier === 1).length >= t1.requiredCount) {
+      if (t1 && teamSubs.filter((s) => s.tier === 1).length >= scaledRequirement(t1.requiredCount, scaleFactor)) {
         completedTiles++;
       }
     }
 
-    for (const row of rows) earnedPoints += bonusPts(getLineBonusTier(tiles, row, team.id), bonusConfig);
-    for (const col of cols) earnedPoints += bonusPts(getLineBonusTier(tiles, col, team.id), bonusConfig);
+    for (const row of rows) earnedPoints += bonusPts(getLineBonusTier(tiles, row, team.id, scaleFactor), bonusConfig);
+    for (const col of cols) earnedPoints += bonusPts(getLineBonusTier(tiles, col, team.id, scaleFactor), bonusConfig);
 
     return { id: team.id, name: team.name, color: team.color, earnedPoints, completedTiles };
   }).sort((a, b) => b.earnedPoints - a.earnedPoints || a.name.localeCompare(b.name));

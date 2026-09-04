@@ -98,6 +98,7 @@ model BingoBoard {
   dinkToken     String?           // token players put in Dink's webhook URL (?token=xxx)
   rowColBonuses Json              @default("{}")  // { t1: number, t2: number, t3: number }
   size          Int               @default(5)     // grid is size x size (3, 4, or 5)
+  scaleByTeamSize Boolean         @default(false) // when true, smaller teams need proportionally fewer drops/points to complete a tile (relative to the board's biggest team) — reward for completing stays the same
   templeSnapshotTakenAt DateTime? // set once, atomically, the first time TempleOSRS baselines are captured
   createdAt     DateTime          @default(now())
   tiles         BingoTile[]

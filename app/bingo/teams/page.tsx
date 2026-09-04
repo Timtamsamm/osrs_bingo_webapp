@@ -13,6 +13,7 @@ export default async function TeamsPage() {
         name: true,
         rowColBonuses: true,
         size: true,
+        scaleByTeamSize: true,
         tiles: {
           orderBy: { position: "asc" },
           select: {
@@ -50,7 +51,8 @@ export default async function TeamsPage() {
     submissions: t.submissions,
   }));
 
-  const { standings, totalPoints, totalTiles } = computeStandings(scoringTiles, teams, bonusConfig, size);
+  const teamsForScoring = teams.map((t) => ({ id: t.id, name: t.name, color: t.color, size: t._count.participants }));
+  const { standings, totalPoints, totalTiles } = computeStandings(scoringTiles, teamsForScoring, bonusConfig, size, board?.scaleByTeamSize ?? false);
   const memberCountById = new Map(teams.map((t) => [t.id, t._count.participants]));
   const medals = ["🥇", "🥈", "🥉"];
 

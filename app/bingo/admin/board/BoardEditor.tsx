@@ -44,6 +44,7 @@ interface Board {
   dinkToken: string | null;
   rowColBonuses: { t1: number; t2: number; t3: number } | null;
   size: number;
+  scaleByTeamSize: boolean;
   tiles: Tile[];
 }
 
@@ -186,6 +187,7 @@ export default function BoardEditor({ board }: Props) {
   const [bonusT1, setBonusT1] = useState(board?.rowColBonuses?.t1 ?? 0);
   const [bonusT2, setBonusT2] = useState(board?.rowColBonuses?.t2 ?? 0);
   const [bonusT3, setBonusT3] = useState(board?.rowColBonuses?.t3 ?? 0);
+  const [scaleByTeamSize, setScaleByTeamSize] = useState(board?.scaleByTeamSize ?? false);
 
   const generateDinkToken = useCallback(() => {
     const token = Array.from(crypto.getRandomValues(new Uint8Array(18)))
@@ -283,6 +285,7 @@ export default function BoardEditor({ board }: Props) {
           size: boardSize,
           dinkToken: boardDinkToken,
           rowColBonuses: { t1: bonusT1, t2: bonusT2, t3: bonusT3 },
+          scaleByTeamSize,
           tiles: tilesPayload,
         }),
       });
@@ -401,6 +404,21 @@ export default function BoardEditor({ board }: Props) {
               {boardEndsAt && <button type="button" onClick={() => setBoardEndsAt("")} className="text-xs text-purple-600 hover:text-red-400 transition-colors">Clear</button>}
             </div>
           </div>
+        </div>
+
+        <div className="flex flex-col gap-1.5 border-t border-purple-900/30 pt-3">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={scaleByTeamSize}
+              onChange={(e) => setScaleByTeamSize(e.target.checked)}
+              className="accent-purple-600"
+            />
+            <span className={labelCls}>Scale requirements by team size</span>
+          </label>
+          <p className="text-[11px] text-purple-700/60">
+            Smaller teams need proportionally fewer drops/points to complete a tile, relative to the board&apos;s biggest team (rounded, minimum 1) — the points awarded for completing stay the same regardless of size. Off by default.
+          </p>
         </div>
       </div>
 

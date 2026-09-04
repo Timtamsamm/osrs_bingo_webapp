@@ -17,6 +17,7 @@ const getLeadingTeamColor = unstable_cache(
         select: {
           rowColBonuses: true,
           size: true,
+          scaleByTeamSize: true,
           tiles: {
             select: {
               id: true,
@@ -33,7 +34,7 @@ const getLeadingTeamColor = unstable_cache(
           },
         },
       }),
-      prisma.team.findMany({ select: { id: true, name: true, color: true } }),
+      prisma.team.findMany({ select: { id: true, name: true, color: true, _count: { select: { participants: true } } } }),
     ]);
 
     const rawBonuses = board?.rowColBonuses as { t1?: number; t2?: number; t3?: number } | null;
@@ -48,7 +49,8 @@ const getLeadingTeamColor = unstable_cache(
       submissions: t.submissions,
     }));
 
-    const { standings } = computeStandings(scoringTiles, teams, bonusConfig, board?.size ?? 5);
+    const teamsForScoring = teams.map((t) => ({ id: t.id, name: t.name, color: t.color, size: t._count.participants }));
+    const { standings } = computeStandings(scoringTiles, teamsForScoring, bonusConfig, board?.size ?? 5, board?.scaleByTeamSize ?? false);
     const leader = standings[0];
     if (!leader || leader.earnedPoints <= 0) return "#c9aa71"; // OSRS gold — default when no team leads
     return leader.color;

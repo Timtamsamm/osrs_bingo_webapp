@@ -69,6 +69,7 @@ interface Props {
   colSummaries: LineSummary[];
   bonusConfig: BonusConfig;
   size: number;
+  scaleByTeamSize?: boolean;
 }
 
 function tileGlowClass(tile: TileSummary) {
@@ -240,7 +241,7 @@ const TIER_ACCENT: Record<number, string> = {
   3: "border-l-emerald-500",
 };
 
-function TileDetailModal({ tile, teams, onClose }: { tile: TileSummary; teams: TeamInfo[]; onClose: () => void }) {
+function TileDetailModal({ tile, teams, scaleByTeamSize, onClose }: { tile: TileSummary; teams: TeamInfo[]; scaleByTeamSize: boolean; onClose: () => void }) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
@@ -312,6 +313,9 @@ function TileDetailModal({ tile, teams, onClose }: { tile: TileSummary; teams: T
                 </div>
               )}
               <p className="text-[11px] text-purple-700/60">Duplicate drops of the same item are worth less each time (halves twice, then stays at 25% of its base value), so a mix of items completes it fastest.</p>
+              {scaleByTeamSize && (
+                <p className="text-[11px] text-amber-500/80">Numbers above are for the board&apos;s biggest team — smaller teams need proportionally less (see each team&apos;s own progress below).</p>
+              )}
             </div>
           ) : (
             <div className="flex flex-col gap-2">
@@ -343,6 +347,9 @@ function TileDetailModal({ tile, teams, onClose }: { tile: TileSummary; teams: T
                     )}
                   </div>
                 ))
+              )}
+              {scaleByTeamSize && sortedTiers.length > 0 && (
+                <p className="text-[11px] text-amber-500/80">Required counts above are for the board&apos;s biggest team — smaller teams need proportionally fewer (see each team&apos;s own progress below).</p>
               )}
             </div>
           )}
@@ -400,7 +407,7 @@ function TileDetailModal({ tile, teams, onClose }: { tile: TileSummary; teams: T
   );
 }
 
-export default function BoardView({ tiles, teams, rowSummaries, colSummaries, bonusConfig, size }: Props) {
+export default function BoardView({ tiles, teams, rowSummaries, colSummaries, bonusConfig, size, scaleByTeamSize = false }: Props) {
   const [view, setView] = useState<View>("grid");
   const [detailTile, setDetailTile] = useState<TileSummary | null>(null);
 
@@ -591,7 +598,7 @@ export default function BoardView({ tiles, teams, rowSummaries, colSummaries, bo
         </div>
       )}
 
-      {detailTile && <TileDetailModal tile={detailTile} teams={teams} onClose={() => setDetailTile(null)} />}
+      {detailTile && <TileDetailModal tile={detailTile} teams={teams} scaleByTeamSize={scaleByTeamSize} onClose={() => setDetailTile(null)} />}
     </div>
   );
 }
