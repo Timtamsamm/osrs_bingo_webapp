@@ -8,7 +8,7 @@ import TeamProgressChart from "./TeamProgressChart";
 import TeamBoardGrid from "./TeamBoardGrid";
 import BoardTabNav from "@/app/components/BoardTabNav";
 import ZoomableThumbnail from "@/app/components/ZoomableThumbnail";
-import { computeStandings, bonusPts, getRows, getCols, type TierDef, type BonusConfig } from "@/lib/scoring";
+import { computeStandings, bonusPts, getRows, getCols, type TierDef, type BonusConfig, type PointsConfig } from "@/lib/scoring";
 
 interface PointEvent {
   date: Date;
@@ -43,10 +43,12 @@ export default async function TeamPage({ params }: Props) {
             position: true,
             title: true,
             imageUrl: true,
+            scoringMode: true,
             tiers: true,
+            pointsConfig: true,
             submissions: {
               where: { status: { not: "REJECTED" }, teamId: { not: null } },
-              select: { teamId: true, status: true, tier: true },
+              select: { teamId: true, status: true, tier: true, pointsAwarded: true },
             },
           },
         },
@@ -60,7 +62,7 @@ export default async function TeamPage({ params }: Props) {
   const submissions = board
     ? await prisma.submission.findMany({
         where: { teamId: team.id, tile: { boardId: board.id } },
-        select: { id: true, tileId: true, tier: true, status: true, source: true, teamMember: true, dinkItemName: true, imageUrl: true, note: true, createdAt: true },
+        select: { id: true, tileId: true, tier: true, status: true, source: true, teamMember: true, dinkItemName: true, imageUrl: true, note: true, createdAt: true, pointsAwarded: true },
         orderBy: { createdAt: "asc" },
       })
     : [];
@@ -72,6 +74,11 @@ export default async function TeamPage({ params }: Props) {
   const tileById = new Map(inRangeTiles.map((t) => [t.id, t]));
   const allTileTitleById = new Map((board?.tiles ?? []).map((t) => [t.id, t.title]));
   const tierDefsByTile = new Map(inRangeTiles.map((t) => [t.id, (t.tiers as TierDef[]) ?? []]));
+  const pointsConfigByTile = new Map(
+    inRangeTiles.map((t) => [t.id, t.scoringMode === "POINTS" ? (t.pointsConfig as PointsConfig | null) : null])
+  );
+  const isConfiguredTile = (tileId: string) =>
+    (tierDefsByTile.get(tileId) ?? []).length > 0 || !!pointsConfigByTile.get(tileId);
   const rawBonuses = board?.rowColBonuses as { t1?: number; t2?: number; t3?: number } | null;
   const bonusConfig: BonusConfig = { t1: rawBonuses?.t1 ?? 0, t2: rawBonuses?.t2 ?? 0, t3: rawBonuses?.t3 ?? 0 };
   const LINES = [...getRows(size).map((p, i) => ({ key: `row-${i}`, label: `Row ${i + 1}`, positions: p })),
@@ -95,7 +102,7 @@ export default async function TeamPage({ params }: Props) {
     const best = positions.map((p) => {
       const tile = [...tileById.values()].find((t) => t.position === p);
       if (!tile) return null;
-      if ((tierDefsByTile.get(tile.id) ?? []).length === 0) return null;
+      if (!isConfiguredTile(tile.id)) return null;
       return bestTierForTile(tile.id);
     });
     if (best.some((b) => b === null)) return null;
@@ -104,25 +111,55 @@ export default async function TeamPage({ params }: Props) {
 
   const events: PointEvent[] = [];
   let runningTotal = 0;
+  const pointsTotalByTile = new Map<string, number>();
 
   for (const sub of approved) {
-    if (sub.tier === null) continue;
-    const tierDefs = tierDefsByTile.get(sub.tileId) ?? [];
-    const tierDef = tierDefs.find((t) => t.tier === sub.tier);
-    if (!tierDef) continue;
+    let tile: (typeof inRangeTiles)[number] | undefined;
 
-    const key = `${sub.tileId}:${sub.tier}`;
-    const newCount = (countByTileTier.get(key) ?? 0) + 1;
-    countByTileTier.set(key, newCount);
-    if (newCount !== tierDef.requiredCount) continue;
+    if (sub.tier === null) {
+      // Points-mode drop — unlimited duplicates, each already diminished at
+      // creation time (see lib/scoring.ts's diminishingPoints). Credit is
+      // capped at the tile's target, same as computeStandings().
+      if (sub.pointsAwarded == null) continue;
+      const cfg = pointsConfigByTile.get(sub.tileId);
+      if (!cfg) continue;
 
-    const tile = tileById.get(sub.tileId);
-    runningTotal += tierDef.points;
-    events.push({ date: sub.createdAt, delta: tierDef.points, label: `${tile?.title ?? "Tile"} (T${sub.tier})` });
+      const prevTotal = pointsTotalByTile.get(sub.tileId) ?? 0;
+      if (prevTotal >= cfg.target) continue;
+      const newTotal = Math.min(prevTotal + sub.pointsAwarded, cfg.target);
+      pointsTotalByTile.set(sub.tileId, newTotal);
+      const delta = newTotal - prevTotal;
+      if (delta <= 0) continue;
 
-    const set = achievedByTile.get(sub.tileId) ?? new Set<number>();
-    set.add(sub.tier);
-    achievedByTile.set(sub.tileId, set);
+      tile = tileById.get(sub.tileId);
+      runningTotal += delta;
+      events.push({ date: sub.createdAt, delta, label: `${tile?.title ?? "Tile"} (+${+delta.toFixed(1)}pts)` });
+
+      if (newTotal >= cfg.target) {
+        // Treat reaching the target as equivalent to a T1 completion for
+        // line-bonus purposes — matches getLineBonusTier in lib/scoring.ts.
+        const set = achievedByTile.get(sub.tileId) ?? new Set<number>();
+        set.add(1);
+        achievedByTile.set(sub.tileId, set);
+      }
+    } else {
+      const tierDefs = tierDefsByTile.get(sub.tileId) ?? [];
+      const tierDef = tierDefs.find((t) => t.tier === sub.tier);
+      if (!tierDef) continue;
+
+      const key = `${sub.tileId}:${sub.tier}`;
+      const newCount = (countByTileTier.get(key) ?? 0) + 1;
+      countByTileTier.set(key, newCount);
+      if (newCount !== tierDef.requiredCount) continue;
+
+      tile = tileById.get(sub.tileId);
+      runningTotal += tierDef.points;
+      events.push({ date: sub.createdAt, delta: tierDef.points, label: `${tile?.title ?? "Tile"} (T${sub.tier})` });
+
+      const set = achievedByTile.get(sub.tileId) ?? new Set<number>();
+      set.add(sub.tier);
+      achievedByTile.set(sub.tileId, set);
+    }
 
     if (!tile) continue;
     for (const line of LINES) {
@@ -157,7 +194,9 @@ export default async function TeamPage({ params }: Props) {
     id: t.id,
     position: t.position,
     title: t.title,
+    scoringMode: t.scoringMode as "TIERED" | "POINTS",
     tiers: (t.tiers as TierDef[]) ?? [],
+    pointsConfig: t.pointsConfig as PointsConfig | null,
     submissions: t.submissions,
   }));
   const { standings } = computeStandings(scoringTiles, allTeams, bonusConfig, size);
@@ -262,14 +301,23 @@ export default async function TeamPage({ params }: Props) {
           <TeamBoardGrid
             size={size}
             teamColor={team.color}
-            tiles={inRangeTiles.filter((t) => t.title.trim()).map((tile) => ({
-              id: tile.id,
-              position: tile.position,
-              title: tile.title,
-              imageUrl: tile.imageUrl,
-              tiers: ((tile.tiers as TierDef[]) ?? []).map((td) => ({ tier: td.tier, points: td.points, requiredCount: td.requiredCount })),
-              achievedTiers: [...(achievedByTile.get(tile.id) ?? new Set<number>())],
-            }))}
+            tiles={inRangeTiles.filter((t) => t.title.trim()).map((tile) => {
+              const cfg = pointsConfigByTile.get(tile.id);
+              return {
+                id: tile.id,
+                position: tile.position,
+                title: tile.title,
+                imageUrl: tile.imageUrl,
+                // Points-mode tiles have no discrete tiers — represent the
+                // whole tile as a single synthetic "tier" worth its target,
+                // achieved only once the target is fully reached, so the
+                // existing tier-based grid component can render it as-is.
+                tiers: cfg
+                  ? [{ tier: 1, points: cfg.target, requiredCount: 1 }]
+                  : ((tile.tiers as TierDef[]) ?? []).map((td) => ({ tier: td.tier, points: td.points, requiredCount: td.requiredCount })),
+                achievedTiers: [...(achievedByTile.get(tile.id) ?? new Set<number>())],
+              };
+            })}
           />
         </div>
 
@@ -289,6 +337,7 @@ export default async function TeamPage({ params }: Props) {
                         {tileTitle}{" "}
                         {s.tier != null && <span className="text-purple-500">T{s.tier}</span>}
                         {s.dinkItemName && <span className="text-purple-500"> · {s.dinkItemName}</span>}
+                        {s.pointsAwarded != null && <span className="text-purple-500"> · +{+s.pointsAwarded.toFixed(1)}pts</span>}
                       </p>
                       <p className="text-[11px] text-purple-700/70">
                         {s.teamMember ?? "—"} · {s.source}

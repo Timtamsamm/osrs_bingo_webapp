@@ -20,6 +20,7 @@ export default async function RecentDropsPage() {
           source: true,
           teamMember: true,
           dinkItemName: true,
+          pointsAwarded: true,
           imageUrl: true,
           createdAt: true,
           tile: { select: { title: true } },
@@ -65,6 +66,7 @@ export default async function RecentDropsPage() {
                       {d.tile.title}{" "}
                       {d.tier != null && <span className="text-purple-500">T{d.tier}</span>}
                       {d.dinkItemName && <span className="text-purple-500"> · {d.dinkItemName}</span>}
+                      {d.pointsAwarded != null && <span className="text-purple-500"> · +{+d.pointsAwarded.toFixed(1)}pts</span>}
                     </p>
                     <p className="text-[11px] text-purple-700/70 flex items-center gap-1.5">
                       {d.team && (

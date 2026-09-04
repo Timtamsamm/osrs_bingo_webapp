@@ -8,6 +8,7 @@ export type TeamStatus = {
   completed: boolean;
   inProgress: boolean;
   achievedTiers: number[];
+  pointsEarned?: number;
 };
 
 export type TileTier = {
@@ -18,13 +19,18 @@ export type TileTier = {
   items: string[];
 };
 
+export type PointsItem = { id: number; name: string; basePoints: number };
+
 export type TileSummary = {
   id: string;
   position: number;
   title: string;
   description: string | null;
   points: number;
+  scoringMode: "TIERED" | "POINTS";
   tiers: TileTier[];
+  pointsTarget: number | null;
+  pointsItems: PointsItem[];
   imageUrl: string | null;
   teamStatuses: TeamStatus[];
 };
@@ -82,11 +88,18 @@ function contrastColor(hex: string): string {
 const MAX_VISIBLE_TEAMS = 6;
 
 function TeamDots({ tile, teams }: { tile: TileSummary; teams: TeamInfo[] }) {
+  const isPoints = tile.scoringMode === "POINTS";
   // Teams with any progress are more useful to see than idle ones, so they
   // take priority for the limited dot slots when there are many teams.
   const withStatus = teams.map((team) => {
     const status = tile.teamStatuses.find((s) => s.teamId === team.id);
-    return { team, completed: status?.completed ?? false, inProgress: status?.inProgress ?? false, tiers: status?.achievedTiers ?? [] };
+    return {
+      team,
+      completed: status?.completed ?? false,
+      inProgress: status?.inProgress ?? false,
+      tiers: status?.achievedTiers ?? [],
+      pointsEarned: status?.pointsEarned ?? 0,
+    };
   });
   const active = withStatus.filter((t) => t.completed || t.inProgress);
   const idle = withStatus.filter((t) => !t.completed && !t.inProgress);
@@ -95,8 +108,14 @@ function TeamDots({ tile, teams }: { tile: TileSummary; teams: TeamInfo[] }) {
 
   return (
     <div className="flex items-center gap-1 flex-wrap">
-      {visible.map(({ team, completed, inProgress, tiers }) => {
-        const label = completed ? "T1 complete" : tiers.length > 0 ? `T${[...tiers].sort().join(", T")} achieved` : "not started";
+      {visible.map(({ team, completed, inProgress, tiers, pointsEarned }) => {
+        const label = isPoints
+          ? `${+pointsEarned.toFixed(1)}/${+(tile.pointsTarget ?? 0).toFixed(1)} pts`
+          : completed
+          ? "T1 complete"
+          : tiers.length > 0
+          ? `T${[...tiers].sort().join(", T")} achieved`
+          : "not started";
         return (
           <span
             key={team.id}
@@ -270,37 +289,58 @@ function TileDetailModal({ tile, teams, onClose }: { tile: TileSummary; teams: T
             </div>
           )}
 
-          <div className="flex flex-col gap-2">
-            <p className="text-xs tracking-[0.2em] text-purple-500 uppercase font-semibold">Tiers</p>
-            {sortedTiers.length === 0 ? (
-              <p className="text-sm text-purple-600/70">No tiers configured yet.</p>
-            ) : (
-              sortedTiers.map((td) => (
-                <div
-                  key={td.tier}
-                  className={`flex flex-col gap-1.5 px-3 py-2.5 rounded-lg bg-[#130a28]/60 border-l-4 border-y border-r border-y-purple-900/30 border-r-purple-900/30 ${TIER_ACCENT[td.tier] ?? "border-l-purple-700"}`}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm font-bold text-purple-100">T{td.tier}</span>
-                    <div className="text-right shrink-0">
-                      <span className="text-sm font-semibold text-white">{+td.points.toFixed(1)} pts</span>
-                      <span className="text-xs text-purple-500 ml-2">{td.requiredCount}× required</span>
-                    </div>
-                  </div>
-                  {td.description && <p className="text-xs text-purple-400/70 whitespace-pre-line">{td.description}</p>}
-                  {td.items.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {td.items.map((name) => (
-                        <span key={name} className="text-xs text-purple-200 bg-purple-900/40 border border-purple-700/30 rounded-full px-2 py-0.5">
-                          {name}
-                        </span>
-                      ))}
-                    </div>
-                  )}
+          {tile.scoringMode === "POINTS" ? (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs tracking-[0.2em] text-purple-500 uppercase font-semibold">Items</p>
+                <span className="text-sm font-semibold text-white">{+(tile.pointsTarget ?? 0).toFixed(1)} pts to complete</span>
+              </div>
+              {tile.pointsItems.length === 0 ? (
+                <p className="text-sm text-purple-600/70">No items configured yet.</p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {tile.pointsItems.map((item) => (
+                    <span key={item.id} className="text-xs text-purple-200 bg-purple-900/40 border border-purple-700/30 rounded-full px-2 py-0.5">
+                      {item.name} <span className="text-purple-400">· {+item.basePoints.toFixed(1)}pt</span>
+                    </span>
+                  ))}
                 </div>
-              ))
-            )}
-          </div>
+              )}
+              <p className="text-[11px] text-purple-700/60">Duplicate drops of the same item are worth less each time (halves twice, then stays at 25% of its base value), so a mix of items completes it fastest.</p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <p className="text-xs tracking-[0.2em] text-purple-500 uppercase font-semibold">Tiers</p>
+              {sortedTiers.length === 0 ? (
+                <p className="text-sm text-purple-600/70">No tiers configured yet.</p>
+              ) : (
+                sortedTiers.map((td) => (
+                  <div
+                    key={td.tier}
+                    className={`flex flex-col gap-1.5 px-3 py-2.5 rounded-lg bg-[#130a28]/60 border-l-4 border-y border-r border-y-purple-900/30 border-r-purple-900/30 ${TIER_ACCENT[td.tier] ?? "border-l-purple-700"}`}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm font-bold text-purple-100">T{td.tier}</span>
+                      <div className="text-right shrink-0">
+                        <span className="text-sm font-semibold text-white">{+td.points.toFixed(1)} pts</span>
+                        <span className="text-xs text-purple-500 ml-2">{td.requiredCount}× required</span>
+                      </div>
+                    </div>
+                    {td.description && <p className="text-xs text-purple-400/70 whitespace-pre-line">{td.description}</p>}
+                    {td.items.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {td.items.map((name) => (
+                          <span key={name} className="text-xs text-purple-200 bg-purple-900/40 border border-purple-700/30 rounded-full px-2 py-0.5">
+                            {name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          )}
 
           {teams.length > 0 && (
             <div className="flex flex-col gap-2">
@@ -308,6 +348,21 @@ function TileDetailModal({ tile, teams, onClose }: { tile: TileSummary; teams: T
               <div className="flex flex-col gap-1.5">
                 {teams.map((team) => {
                   const status = tile.teamStatuses.find((s) => s.teamId === team.id);
+                  if (tile.scoringMode === "POINTS") {
+                    const earned = status?.pointsEarned ?? 0;
+                    const target = tile.pointsTarget ?? 0;
+                    const pct = target > 0 ? Math.min((earned / target) * 100, 100) : 0;
+                    return (
+                      <div key={team.id} className="flex items-center gap-2 text-sm">
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: team.color, boxShadow: `0 0 4px ${team.color}` }} />
+                        <span className="text-purple-200 flex-1 truncate">{team.name}</span>
+                        <div className="w-16 h-1.5 bg-purple-950/60 rounded-full overflow-hidden shrink-0">
+                          <div className="h-full rounded-full" style={{ width: `${pct}%`, background: team.color }} />
+                        </div>
+                        <span className="text-xs text-purple-500 shrink-0 tabular-nums">{+earned.toFixed(1)}/{+target.toFixed(1)}</span>
+                      </div>
+                    );
+                  }
                   const achieved = status?.achievedTiers ?? [];
                   const label = achieved.length > 0 ? `T${[...achieved].sort().join(", T")}` : "Not started";
                   return (

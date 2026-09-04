@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 type TierDef = { tier: number; points: number; requiredCount: number; dinkItems: Array<{ id: number; name: string }> };
+type PointsConfig = { target: number; items: Array<{ id: number; name: string; basePoints: number }> };
 
 // Dink's "Dynamic Config URL" feature (Advanced tab) fetches this on login and
 // every ~3h, and merges the returned JSON straight into the player's local
@@ -16,7 +17,7 @@ export async function GET(req: NextRequest) {
     select: {
       dinkToken: true,
       size: true,
-      tiles: { select: { position: true, tiers: true } },
+      tiles: { select: { position: true, scoringMode: true, tiers: true, pointsConfig: true } },
     },
   });
 
@@ -31,6 +32,11 @@ export async function GET(req: NextRequest) {
 
   const itemNames = new Set<string>();
   for (const tile of inRangeTiles) {
+    if (tile.scoringMode === "POINTS") {
+      const cfg = tile.pointsConfig as PointsConfig | null;
+      for (const item of cfg?.items ?? []) itemNames.add(item.name);
+      continue;
+    }
     const tiers = (tile.tiers as TierDef[]) ?? [];
     for (const tierDef of tiers) {
       for (const item of tierDef.dinkItems) {

@@ -13,13 +13,26 @@ export interface TierDef {
   dinkItems: Array<{ id: number; name: string }>;
 }
 
+export interface PointsItemDef {
+  id: number;
+  name: string;
+  basePoints: number;
+}
+
+export interface PointsConfig {
+  target: number;
+  items: PointsItemDef[];
+}
+
 interface Tile {
   id: string;
   position: number;
   title: string;
   description: string | null;
   imageUrl: string | null;
+  scoringMode: string;
   tiers: TierDef[] | null;
+  pointsConfig: PointsConfig | null;
 }
 
 interface Board {
@@ -56,6 +69,26 @@ function dinkItemsToText(items: Array<{ id: number; name: string }> | null): str
   return (items ?? []).map((i) => `${i.id} ${i.name}`).join("\n");
 }
 
+function parsePointsItems(text: string): PointsItemDef[] {
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .flatMap((line) => {
+      const parts = line.split(/\s+/);
+      if (parts.length < 3) return [];
+      const id = parseInt(parts[0], 10);
+      const basePoints = parseFloat(parts[1]);
+      const name = parts.slice(2).join(" ");
+      if (isNaN(id) || isNaN(basePoints) || !name) return [];
+      return [{ id, name, basePoints }];
+    });
+}
+
+function pointsItemsToText(items: PointsItemDef[] | null | undefined): string {
+  return (items ?? []).map((i) => `${i.id} ${i.basePoints} ${i.name}`).join("\n");
+}
+
 function toDatetimeLocal(date: Date | null): string {
   if (!date) return "";
   const d = new Date(date);
@@ -73,21 +106,38 @@ interface TileState {
   title: string;
   description: string;
   imageUrl: string | null;
+  scoringMode: "TIERED" | "POINTS";
   t1: TierState;
   t2: TierState;
   t3: TierState;
+  pointsTarget: number;
+  pointsItemsText: string;
 }
 
 const EMPTY_TIER: TierState = { points: 1, requiredCount: 1, description: "", dinkItemsText: "" };
 
 function makeTileState(t: Tile | undefined): TileState {
-  if (!t) return { title: "", description: "", imageUrl: null, t1: { ...EMPTY_TIER }, t2: { ...EMPTY_TIER }, t3: { ...EMPTY_TIER } };
+  if (!t) {
+    return {
+      title: "", description: "", imageUrl: null, scoringMode: "TIERED",
+      t1: { ...EMPTY_TIER }, t2: { ...EMPTY_TIER }, t3: { ...EMPTY_TIER },
+      pointsTarget: 100, pointsItemsText: "",
+    };
+  }
   const tiers = t.tiers ?? [];
   const getTier = (n: 1 | 2 | 3): TierState => {
     const td = tiers.find((d) => d.tier === n);
     return td ? { points: td.points, requiredCount: td.requiredCount, description: td.description ?? "", dinkItemsText: dinkItemsToText(td.dinkItems) } : { ...EMPTY_TIER };
   };
-  return { title: t.title, description: t.description ?? "", imageUrl: t.imageUrl ?? null, t1: getTier(1), t2: getTier(2), t3: getTier(3) };
+  return {
+    title: t.title,
+    description: t.description ?? "",
+    imageUrl: t.imageUrl ?? null,
+    scoringMode: t.scoringMode === "POINTS" ? "POINTS" : "TIERED",
+    t1: getTier(1), t2: getTier(2), t3: getTier(3),
+    pointsTarget: t.pointsConfig?.target ?? 100,
+    pointsItemsText: pointsItemsToText(t.pointsConfig?.items),
+  };
 }
 
 function stateToTiers(t: TileState): TierDef[] {
@@ -99,6 +149,12 @@ function stateToTiers(t: TileState): TierDef[] {
     }
   }
   return result;
+}
+
+function stateToPointsConfig(t: TileState): PointsConfig | null {
+  const items = parsePointsItems(t.pointsItemsText);
+  if (items.length === 0) return null;
+  return { target: t.pointsTarget, items };
 }
 
 interface Props {
@@ -148,8 +204,16 @@ export default function BoardEditor({ board }: Props) {
   const [imageUploading, setImageUploading] = useState(false);
   const [cropSrc, setCropSrc] = useState<{ pos: number; src: string } | null>(null);
 
-  function updateTile(pos: number, field: "title" | "description", value: string) {
+  function updateTile(pos: number, field: "title" | "description" | "pointsItemsText", value: string) {
     setTiles((prev) => ({ ...prev, [pos]: { ...prev[pos], [field]: value } }));
+  }
+
+  function setScoringMode(pos: number, mode: "TIERED" | "POINTS") {
+    setTiles((prev) => ({ ...prev, [pos]: { ...prev[pos], scoringMode: mode } }));
+  }
+
+  function setPointsTarget(pos: number, value: number) {
+    setTiles((prev) => ({ ...prev, [pos]: { ...prev[pos], pointsTarget: value } }));
   }
 
   function updateTier(pos: number, tierKey: "t1" | "t2" | "t3", field: keyof TierState, value: string | number) {
@@ -195,7 +259,14 @@ export default function BoardEditor({ board }: Props) {
           .filter(([pos]) => Number(pos) < boardSize * boardSize)
           .map(([pos, t]) => [
             pos,
-            { title: t.title, description: t.description, imageUrl: t.imageUrl, tiers: stateToTiers(t) },
+            {
+              title: t.title,
+              description: t.description,
+              imageUrl: t.imageUrl,
+              scoringMode: t.scoringMode,
+              tiers: t.scoringMode === "TIERED" ? stateToTiers(t) : [],
+              pointsConfig: t.scoringMode === "POINTS" ? stateToPointsConfig(t) : null,
+            },
           ])
       );
       const res = await fetch("/api/admin/board", {
@@ -339,7 +410,9 @@ export default function BoardEditor({ board }: Props) {
             {Array.from({ length: boardSize * boardSize }, (_, i) => {
               const t = tiles[i];
               const filled = t.title.trim().length > 0;
-              const hasTiers = filled && stateToTiers(t).length > 0;
+              const isPoints = t.scoringMode === "POINTS";
+              const hasTiers = filled && !isPoints && stateToTiers(t).length > 0;
+              const hasPointsItems = filled && isPoints && parsePointsItems(t.pointsItemsText).length > 0;
               return (
                 <button
                   key={i}
@@ -355,6 +428,9 @@ export default function BoardEditor({ board }: Props) {
                   <span className="line-clamp-2 leading-tight">{filled ? t.title : i + 1}</span>
                   {hasTiers && (
                     <span className="text-[8px] text-purple-500 mt-0.5">{stateToTiers(t).map(td => `T${td.tier}`).join(" ")}</span>
+                  )}
+                  {hasPointsItems && (
+                    <span className="text-[8px] text-emerald-500 mt-0.5">{t.pointsTarget}pt</span>
                   )}
                 </button>
               );
@@ -380,7 +456,71 @@ export default function BoardEditor({ board }: Props) {
                 <textarea value={selectedTile!.description} onChange={(e) => updateTile(selected, "description", e.target.value)} rows={2} placeholder="Any extra instructions" className={`${inputCls} resize-y`} />
               </div>
 
-              {/* Tier sections */}
+              {/* Scoring mode toggle */}
+              <div className="flex flex-col gap-1">
+                <label className={labelCls}>Scoring mode</label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setScoringMode(selected, "TIERED")}
+                    className={`text-xs font-semibold rounded-lg px-3 py-1.5 border transition-colors ${
+                      selectedTile!.scoringMode === "TIERED"
+                        ? "bg-purple-700/60 border-purple-500 text-white"
+                        : "bg-[#130a28] border-purple-900/50 text-purple-400 hover:border-purple-700/60"
+                    }`}
+                  >
+                    Tiered
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setScoringMode(selected, "POINTS")}
+                    className={`text-xs font-semibold rounded-lg px-3 py-1.5 border transition-colors ${
+                      selectedTile!.scoringMode === "POINTS"
+                        ? "bg-emerald-700/60 border-emerald-500 text-white"
+                        : "bg-[#130a28] border-purple-900/50 text-purple-400 hover:border-purple-700/60"
+                    }`}
+                  >
+                    Points
+                  </button>
+                </div>
+                <p className="text-[11px] text-purple-700/60">
+                  {selectedTile!.scoringMode === "TIERED"
+                    ? "Get a specific set of items to fill each tier."
+                    : "Unlimited drops toward a point target — duplicates of the same item are worth less each time."}
+                </p>
+              </div>
+
+              {selectedTile!.scoringMode === "POINTS" ? (
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-end gap-3">
+                    <div className="flex flex-col gap-1 w-32 shrink-0">
+                      <label className={labelCls}>Target points</label>
+                      <input
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={selectedTile!.pointsTarget}
+                        onChange={(e) => setPointsTarget(selected, Number(e.target.value))}
+                        className={inputCls}
+                      />
+                    </div>
+                    <p className="text-[11px] text-purple-700/60 pb-2">Total points a team needs to complete this tile.</p>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className={labelCls}>Items (id, base points, name)</label>
+                    <textarea
+                      value={selectedTile!.pointsItemsText}
+                      onChange={(e) => updateTile(selected, "pointsItemsText", e.target.value)}
+                      rows={6}
+                      placeholder={"11832 30 Bandos chestplate\n11834 30 Bandos tassets"}
+                      className={`${inputCls} font-mono resize-y text-xs`}
+                    />
+                  </div>
+                  <p className="text-[10px] text-purple-700/60">
+                    One item per line as <span className="font-mono text-purple-600">itemId basePoints item name</span>. Each duplicate drop of the same item is worth half the last, twice, then stays flat at 25% of its base value — so mixing items completes the tile fastest.
+                  </p>
+                </div>
+              ) : (
               <div className="flex flex-col gap-1.5">
                 <p className={labelCls}>Tiers — add Dink items to activate a tier</p>
                 {(["t3", "t2", "t1"] as const).map((tierKey) => {
@@ -455,6 +595,7 @@ export default function BoardEditor({ board }: Props) {
                 })}
                 <p className="text-[10px] text-purple-700/60">Item IDs: one per line as <span className="font-mono text-purple-600">itemId item name</span>. Leave all blank to skip a tier.</p>
               </div>
+              )}
 
               {/* Image */}
               <div className="flex flex-col gap-1.5">

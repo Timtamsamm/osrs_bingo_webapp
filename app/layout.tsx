@@ -6,7 +6,7 @@ import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import LeadColorAmbience from "@/app/components/LeadColorAmbience";
 import PageFade from "@/app/components/PageFade";
-import { computeStandings, type TierDef } from "@/lib/scoring";
+import { computeStandings, type TierDef, type PointsConfig } from "@/lib/scoring";
 import "./globals.css";
 
 const getLeadingTeamColor = unstable_cache(
@@ -22,10 +22,12 @@ const getLeadingTeamColor = unstable_cache(
               id: true,
               position: true,
               title: true,
+              scoringMode: true,
               tiers: true,
+              pointsConfig: true,
               submissions: {
                 where: { status: { not: "REJECTED" }, teamId: { not: null } },
-                select: { teamId: true, status: true, tier: true },
+                select: { teamId: true, status: true, tier: true, pointsAwarded: true },
               },
             },
           },
@@ -40,7 +42,9 @@ const getLeadingTeamColor = unstable_cache(
       id: t.id,
       position: t.position,
       title: t.title,
+      scoringMode: t.scoringMode as "TIERED" | "POINTS",
       tiers: (t.tiers as TierDef[]) ?? [],
+      pointsConfig: t.pointsConfig as PointsConfig | null,
       submissions: t.submissions,
     }));
 

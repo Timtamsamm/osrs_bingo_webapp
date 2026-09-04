@@ -5,6 +5,7 @@ import ManualAwardForm from "./ManualAwardForm";
 import { Suspense } from "react";
 
 type TierDef = { tier: 1 | 2 | 3; points: number; requiredCount: number; dinkItems: Array<{ id: number; name: string }> };
+type PointsConfig = { target: number; items: Array<{ id: number; name: string; basePoints: number }> };
 
 interface Props {
   searchParams: Promise<{ team?: string }>;
@@ -53,12 +54,18 @@ export default async function AdminSubmissionsPage({ searchParams }: Props) {
     }),
     prisma.bingoBoard.findFirst({
       where: { active: true },
-      select: { tiles: { select: { id: true, title: true, tiers: true }, orderBy: { position: "asc" } } },
+      select: { tiles: { select: { id: true, title: true, scoringMode: true, tiers: true, pointsConfig: true }, orderBy: { position: "asc" } } },
     }),
   ]);
 
   const teamNames = allTeams.map((t) => t.name);
-  const awardTiles = (activeBoard?.tiles ?? []).map((t) => ({ id: t.id, title: t.title, tiers: (t.tiers as TierDef[]) ?? [] }));
+  const awardTiles = (activeBoard?.tiles ?? []).map((t) => ({
+    id: t.id,
+    title: t.title,
+    scoringMode: t.scoringMode as "TIERED" | "POINTS",
+    tiers: (t.tiers as TierDef[]) ?? [],
+    pointsConfig: t.pointsConfig as PointsConfig | null,
+  }));
 
   return (
     <div>

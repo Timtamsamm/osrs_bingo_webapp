@@ -23,7 +23,9 @@ export default async function AdminBoardPage() {
           rowColBonuses: (board.rowColBonuses ?? { t1: 0, t2: 0, t3: 0 }) as unknown as { t1: number; t2: number; t3: number },
           tiles: board.tiles.map((t) => ({
             ...t,
+            scoringMode: t.scoringMode,
             tiers: (t.tiers ?? []) as unknown as import("./BoardEditor").TierDef[] | null,
+            pointsConfig: (t.pointsConfig ?? null) as unknown as import("./BoardEditor").PointsConfig | null,
           })),
         } : null} />
       </div>

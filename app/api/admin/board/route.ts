@@ -1,10 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 
 type DinkItem = { id: number; name: string };
 type TierDef = { tier: 1 | 2 | 3; points: number; requiredCount: number; description?: string; dinkItems: DinkItem[] };
-type TileInput = { title: string; description: string; imageUrl?: string; tiers: TierDef[] };
+type PointsConfig = { target: number; items: Array<{ id: number; name: string; basePoints: number }> };
+type TileInput = {
+  title: string;
+  description: string;
+  imageUrl?: string;
+  scoringMode?: "TIERED" | "POINTS";
+  tiers: TierDef[];
+  pointsConfig?: PointsConfig | null;
+};
 
 async function requireAdmin() {
   const session = await auth();
@@ -38,7 +47,9 @@ export async function POST(req: NextRequest) {
             title: t.title.trim(),
             description: t.description?.trim() || null,
             imageUrl: t.imageUrl || null,
+            scoringMode: t.scoringMode ?? "TIERED",
             tiers: t.tiers ?? [],
+            pointsConfig: t.pointsConfig ?? Prisma.JsonNull,
           })),
       },
     },
@@ -76,7 +87,9 @@ export async function PUT(req: NextRequest) {
       title: t.title.trim(),
       description: t.description?.trim() || null,
       imageUrl: t.imageUrl || null,
+      scoringMode: t.scoringMode ?? "TIERED",
       tiers: t.tiers ?? [],
+      pointsConfig: t.pointsConfig ?? Prisma.JsonNull,
     };
     if (existing) {
       await prisma.bingoTile.update({ where: { id: existing.id }, data });

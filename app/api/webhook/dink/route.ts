@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { put } from "@vercel/blob";
+import { diminishingPoints } from "@/lib/scoring";
 
 type TierDef = { tier: number; points: number; requiredCount: number; dinkItems: Array<{ id: number; name: string }> };
+type PointsConfig = { target: number; items: Array<{ id: number; name: string; basePoints: number }> };
 
 function normalizeRsn(rsn: string): string {
   return rsn.trim().replace(/[_ ]/g, " ").toLowerCase();
@@ -61,7 +63,9 @@ export async function POST(req: NextRequest) {
           id: true,
           position: true,
           title: true,
+          scoringMode: true,
           tiers: true,
+          pointsConfig: true,
         },
       },
     },
@@ -120,7 +124,22 @@ export async function POST(req: NextRequest) {
   // treated as a shared pool (e.g. "Any 3 pets" with the same pet IDs in
   // every tier box) — see the branch below.
   const itemToTile = new Map<number, { tileId: string; tileTitle: string; tierDefs: TierDef[] }>();
+  // Points-mode tiles: unlimited duplicate drops allowed, each worth less
+  // than the last (see diminishingPoints in lib/scoring.ts) — no tier concept.
+  const itemToPointsTile = new Map<number, { tileId: string; tileTitle: string; basePoints: number; target: number }>();
+
   for (const tile of board.tiles) {
+    if (tile.scoringMode === "POINTS") {
+      const cfg = tile.pointsConfig as PointsConfig | null;
+      if (!cfg) continue;
+      for (const item of cfg.items) {
+        if (!itemToPointsTile.has(item.id)) {
+          itemToPointsTile.set(item.id, { tileId: tile.id, tileTitle: tile.title, basePoints: item.basePoints, target: cfg.target });
+        }
+      }
+      continue;
+    }
+
     const tiers = (tile.tiers as TierDef[]) ?? [];
     const tiersByItem = new Map<number, TierDef[]>();
     for (const tierDef of tiers) {
@@ -156,6 +175,33 @@ export async function POST(req: NextRequest) {
   const matched: string[] = [];
 
   for (const item of droppedItems) {
+    const pointsMatch = itemToPointsTile.get(item.id);
+    if (pointsMatch) {
+      const { tileId, tileTitle, basePoints } = pointsMatch;
+      const priorCount = await prisma.submission.count({
+        where: { teamId, tileId, dinkItemId: item.id, status: { not: "REJECTED" } },
+      });
+      const pointsAwarded = diminishingPoints(basePoints, priorCount + 1);
+
+      await prisma.submission.create({
+        data: {
+          teamId,
+          tileId,
+          imageUrl,
+          status: verified ? "APPROVED" : "PENDING",
+          reviewedAt: verified ? now : null,
+          source: "dink",
+          dinkItemId: item.id,
+          dinkItemName: item.name,
+          teamMember: playerName,
+          pointsAwarded,
+        },
+      });
+
+      matched.push(`${tileTitle} (+${+pointsAwarded.toFixed(1)}pts)`);
+      continue;
+    }
+
     const match = itemToTile.get(item.id);
     if (!match) continue;
     const { tileId, tileTitle, tierDefs } = match;

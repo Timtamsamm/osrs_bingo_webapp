@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import BoardTabNav from "@/app/components/BoardTabNav";
-import { computeStandings, type TierDef, type BonusConfig } from "@/lib/scoring";
+import { computeStandings, type TierDef, type BonusConfig, type PointsConfig } from "@/lib/scoring";
 
 export default async function TeamsPage() {
   const [board, teams] = await Promise.all([
@@ -19,10 +19,12 @@ export default async function TeamsPage() {
             id: true,
             position: true,
             title: true,
+            scoringMode: true,
             tiers: true,
+            pointsConfig: true,
             submissions: {
               where: { status: { not: "REJECTED" }, teamId: { not: null } },
-              select: { teamId: true, status: true, tier: true },
+              select: { teamId: true, status: true, tier: true, pointsAwarded: true },
             },
           },
         },
@@ -42,7 +44,9 @@ export default async function TeamsPage() {
     id: t.id,
     position: t.position,
     title: t.title,
+    scoringMode: t.scoringMode as "TIERED" | "POINTS",
     tiers: (t.tiers as TierDef[]) ?? [],
+    pointsConfig: t.pointsConfig as PointsConfig | null,
     submissions: t.submissions,
   }));
 

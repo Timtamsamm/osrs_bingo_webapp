@@ -117,13 +117,15 @@ model TempleSnapshot {
 }
 
 model BingoTile {
-  id          String   @id @default(cuid())
-  boardId     String
-  position    Int      // 0–24 for a 5×5 grid
-  title       String
-  description String?
-  imageUrl    String?  // reference/example image
-  tiers       Json     @default("[]")  // TierDef[] — [{tier:1|2|3, points, requiredCount, dinkItems:[{id,name}]}]
+  id           String   @id @default(cuid())
+  boardId      String
+  position     Int      // 0–24 for a 5×5 grid
+  title        String
+  description  String?
+  imageUrl     String?  // reference/example image
+  scoringMode  String   @default("TIERED")  // "TIERED" | "POINTS"
+  tiers        Json     @default("[]")  // TierDef[] — used when scoringMode = TIERED — [{tier:1|2|3, points, requiredCount, dinkItems:[{id,name}]}]
+  pointsConfig Json?    // used when scoringMode = POINTS — { target: number, items: [{id, name, basePoints}] }
 
   board       BingoBoard   @relation(fields: [boardId], references: [id], onDelete: Cascade)
   submissions Submission[]
@@ -144,7 +146,8 @@ model Submission {
   source     String           @default("manual")  // "manual" | "dink"
   dinkItemId   Int?           // OSRS item ID that triggered this (duplicate detection)
   dinkItemName String?        // item name for display in admin queue
-  tier         Int?           // which tier this submission satisfied (1=hardest, 3=easiest)
+  tier         Int?           // which tier this submission satisfied (1=hardest, 3=easiest) — TIERED tiles only
+  pointsAwarded Float?        // points this specific drop contributed — POINTS-mode tiles only
   createdAt  DateTime         @default(now())
   reviewedAt DateTime?
 

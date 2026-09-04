@@ -6,7 +6,7 @@ import BoardTabNav from "@/app/components/BoardTabNav";
 import Countdown from "@/app/components/Countdown";
 import BoardView from "./BoardView";
 import type { TileSummary, LineSummary, BonusConfig } from "./BoardView";
-import { computeStandings, getLineBonusTier, getRows, getCols, type TierDef } from "@/lib/scoring";
+import { computeStandings, getLineBonusTier, getRows, getCols, type TierDef, type PointsConfig } from "@/lib/scoring";
 
 export default async function BoardPage() {
   const [board, teams] = await Promise.all([
@@ -18,7 +18,7 @@ export default async function BoardPage() {
           include: {
             submissions: {
               where: { status: { not: "REJECTED" }, teamId: { not: null } },
-              select: { teamId: true, status: true, tier: true },
+              select: { teamId: true, status: true, tier: true, pointsAwarded: true },
             },
           },
         },
@@ -43,7 +43,9 @@ export default async function BoardPage() {
       id: tile.id,
       position: tile.position,
       title: tile.title,
+      scoringMode: tile.scoringMode as "TIERED" | "POINTS",
       tiers: (tile.tiers as TierDef[]) ?? [],
+      pointsConfig: tile.pointsConfig as PointsConfig | null,
       submissions: tile.submissions,
     }));
 
@@ -52,24 +54,45 @@ export default async function BoardPage() {
 
   const tiles: TileSummary[] = scoringTiles.map((tile) => {
     const boardTile = boardTileById.get(tile.id)!;
+    const isPoints = tile.scoringMode === "POINTS" && !!tile.pointsConfig;
+    const pointsConfig = tile.pointsConfig;
+
     return {
       id: tile.id,
       position: tile.position,
       title: tile.title,
       description: boardTile.description,
-      points: tile.tiers.reduce((sum, t) => sum + t.points, 0),
-      tiers: tile.tiers.map((t) => ({
-        tier: t.tier,
-        points: t.points,
-        requiredCount: t.requiredCount,
-        description: t.description ?? null,
-        items: (t.dinkItems ?? []).map((i) => i.name),
-      })),
+      scoringMode: tile.scoringMode,
+      points: isPoints ? pointsConfig!.target : tile.tiers.reduce((sum, t) => sum + t.points, 0),
+      tiers: isPoints
+        ? []
+        : tile.tiers.map((t) => ({
+            tier: t.tier,
+            points: t.points,
+            requiredCount: t.requiredCount,
+            description: t.description ?? null,
+            items: (t.dinkItems ?? []).map((i) => i.name),
+          })),
+      pointsTarget: isPoints ? pointsConfig!.target : null,
+      pointsItems: isPoints ? pointsConfig!.items : [],
       imageUrl: boardTile.imageUrl,
       teamStatuses: teams.map((team) => {
-        const teamSubs = tile.submissions.filter((s) => s.teamId === team.id);
+        const teamSubs = tile.submissions.filter((s) => s.teamId === team.id && s.status === "APPROVED");
+
+        if (isPoints) {
+          const earned = teamSubs.reduce((sum, s) => sum + (s.pointsAwarded ?? 0), 0);
+          const capped = Math.min(earned, pointsConfig!.target);
+          return {
+            teamId: team.id,
+            completed: capped >= pointsConfig!.target,
+            inProgress: capped > 0 && capped < pointsConfig!.target,
+            achievedTiers: [],
+            pointsEarned: capped,
+          };
+        }
+
         const achievedTiers = tile.tiers
-          .filter((td) => teamSubs.filter((s) => s.tier === td.tier && s.status === "APPROVED").length >= td.requiredCount)
+          .filter((td) => teamSubs.filter((s) => s.tier === td.tier).length >= td.requiredCount)
           .map((td) => td.tier);
         return {
           teamId: team.id,
