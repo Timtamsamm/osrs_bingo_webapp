@@ -6,7 +6,7 @@ import BoardTabNav from "@/app/components/BoardTabNav";
 import Countdown from "@/app/components/Countdown";
 import BoardView from "./BoardView";
 import type { TileSummary, LineSummary, BonusConfig } from "./BoardView";
-import { computeStandings, getLineBonusTier, getRows, getCols, type TierDef, type PointsConfig } from "@/lib/scoring";
+import { computeStandings, getLineBonusTier, getRows, getCols, pointsNominalMax, pointsTileProgress, type TierDef, type PointsConfig } from "@/lib/scoring";
 
 export default async function BoardPage() {
   const [board, teams] = await Promise.all([
@@ -18,7 +18,7 @@ export default async function BoardPage() {
           include: {
             submissions: {
               where: { status: { not: "REJECTED" }, teamId: { not: null } },
-              select: { teamId: true, status: true, tier: true, pointsAwarded: true },
+              select: { teamId: true, status: true, tier: true, pointsAwarded: true, dinkItemId: true },
             },
           },
         },
@@ -63,7 +63,7 @@ export default async function BoardPage() {
       title: tile.title,
       description: boardTile.description,
       scoringMode: tile.scoringMode,
-      points: isPoints ? pointsConfig!.target : tile.tiers.reduce((sum, t) => sum + t.points, 0),
+      points: isPoints ? pointsNominalMax(pointsConfig!) : tile.tiers.reduce((sum, t) => sum + t.points, 0),
       tiers: isPoints
         ? []
         : tile.tiers.map((t) => ({
@@ -73,21 +73,21 @@ export default async function BoardPage() {
             description: t.description ?? null,
             items: (t.dinkItems ?? []).map((i) => i.name),
           })),
-      pointsTarget: isPoints ? pointsConfig!.target : null,
+      pointsTarget: isPoints ? pointsConfig!.target ?? null : null,
       pointsItems: isPoints ? pointsConfig!.items : [],
       imageUrl: boardTile.imageUrl,
       teamStatuses: teams.map((team) => {
         const teamSubs = tile.submissions.filter((s) => s.teamId === team.id && s.status === "APPROVED");
 
         if (isPoints) {
-          const earned = teamSubs.reduce((sum, s) => sum + (s.pointsAwarded ?? 0), 0);
-          const capped = Math.min(earned, pointsConfig!.target);
+          const { earned, completed, receivedItemIds } = pointsTileProgress(pointsConfig!, teamSubs);
           return {
             teamId: team.id,
-            completed: capped >= pointsConfig!.target,
-            inProgress: capped > 0 && capped < pointsConfig!.target,
+            completed,
+            inProgress: !completed && earned > 0,
             achievedTiers: [],
-            pointsEarned: capped,
+            pointsEarned: earned,
+            receivedItemIds: [...receivedItemIds],
           };
         }
 

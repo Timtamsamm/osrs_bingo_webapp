@@ -27,7 +27,7 @@ const getLeadingTeamColor = unstable_cache(
               pointsConfig: true,
               submissions: {
                 where: { status: { not: "REJECTED" }, teamId: { not: null } },
-                select: { teamId: true, status: true, tier: true, pointsAwarded: true },
+                select: { teamId: true, status: true, tier: true, pointsAwarded: true, dinkItemId: true },
               },
             },
           },

@@ -9,6 +9,7 @@ export type TeamStatus = {
   inProgress: boolean;
   achievedTiers: number[];
   pointsEarned?: number;
+  receivedItemIds?: number[];
 };
 
 export type TileTier = {
@@ -110,7 +111,9 @@ function TeamDots({ tile, teams }: { tile: TileSummary; teams: TeamInfo[] }) {
     <div className="flex items-center gap-1 flex-wrap">
       {visible.map(({ team, completed, inProgress, tiers, pointsEarned }) => {
         const label = isPoints
-          ? `${+pointsEarned.toFixed(1)}/${+(tile.pointsTarget ?? 0).toFixed(1)} pts`
+          ? tile.pointsTarget != null
+            ? `${+pointsEarned.toFixed(1)}/${+tile.pointsTarget.toFixed(1)} pts`
+            : `${+pointsEarned.toFixed(1)} pts`
           : completed
           ? "T1 complete"
           : tiers.length > 0
@@ -293,7 +296,9 @@ function TileDetailModal({ tile, teams, onClose }: { tile: TileSummary; teams: T
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between gap-3">
                 <p className="text-xs tracking-[0.2em] text-purple-500 uppercase font-semibold">Items</p>
-                <span className="text-sm font-semibold text-white">{+(tile.pointsTarget ?? 0).toFixed(1)} pts to complete</span>
+                <span className="text-sm font-semibold text-white">
+                  {tile.pointsTarget != null ? `${+tile.pointsTarget.toFixed(1)} pts to complete` : "Collect 1 of each to complete"}
+                </span>
               </div>
               {tile.pointsItems.length === 0 ? (
                 <p className="text-sm text-purple-600/70">No items configured yet.</p>
@@ -350,16 +355,29 @@ function TileDetailModal({ tile, teams, onClose }: { tile: TileSummary; teams: T
                   const status = tile.teamStatuses.find((s) => s.teamId === team.id);
                   if (tile.scoringMode === "POINTS") {
                     const earned = status?.pointsEarned ?? 0;
-                    const target = tile.pointsTarget ?? 0;
-                    const pct = target > 0 ? Math.min((earned / target) * 100, 100) : 0;
+                    const target = tile.pointsTarget;
+
+                    if (target != null) {
+                      const pct = target > 0 ? Math.min((earned / target) * 100, 100) : 0;
+                      return (
+                        <div key={team.id} className="flex items-center gap-2 text-sm">
+                          <span className="w-2 h-2 rounded-full shrink-0" style={{ background: team.color, boxShadow: `0 0 4px ${team.color}` }} />
+                          <span className="text-purple-200 flex-1 truncate">{team.name}</span>
+                          <div className="w-16 h-1.5 bg-purple-950/60 rounded-full overflow-hidden shrink-0">
+                            <div className="h-full rounded-full" style={{ width: `${pct}%`, background: team.color }} />
+                          </div>
+                          <span className="text-xs text-purple-500 shrink-0 tabular-nums">{+earned.toFixed(1)}/{+target.toFixed(1)}</span>
+                        </div>
+                      );
+                    }
+
+                    // No target — completion means one of every item, points are uncapped.
+                    const receivedCount = tile.pointsItems.filter((i) => status?.receivedItemIds?.includes(i.id)).length;
                     return (
                       <div key={team.id} className="flex items-center gap-2 text-sm">
                         <span className="w-2 h-2 rounded-full shrink-0" style={{ background: team.color, boxShadow: `0 0 4px ${team.color}` }} />
                         <span className="text-purple-200 flex-1 truncate">{team.name}</span>
-                        <div className="w-16 h-1.5 bg-purple-950/60 rounded-full overflow-hidden shrink-0">
-                          <div className="h-full rounded-full" style={{ width: `${pct}%`, background: team.color }} />
-                        </div>
-                        <span className="text-xs text-purple-500 shrink-0 tabular-nums">{+earned.toFixed(1)}/{+target.toFixed(1)}</span>
+                        <span className="text-xs text-purple-500 shrink-0 tabular-nums">{receivedCount}/{tile.pointsItems.length} items · {+earned.toFixed(1)}pts</span>
                       </div>
                     );
                   }

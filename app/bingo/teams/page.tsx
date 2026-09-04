@@ -24,7 +24,7 @@ export default async function TeamsPage() {
             pointsConfig: true,
             submissions: {
               where: { status: { not: "REJECTED" }, teamId: { not: null } },
-              select: { teamId: true, status: true, tier: true, pointsAwarded: true },
+              select: { teamId: true, status: true, tier: true, pointsAwarded: true, dinkItemId: true },
             },
           },
         },

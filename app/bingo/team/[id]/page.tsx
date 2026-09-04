@@ -8,7 +8,7 @@ import TeamProgressChart from "./TeamProgressChart";
 import TeamBoardGrid from "./TeamBoardGrid";
 import BoardTabNav from "@/app/components/BoardTabNav";
 import ZoomableThumbnail from "@/app/components/ZoomableThumbnail";
-import { computeStandings, bonusPts, getRows, getCols, type TierDef, type BonusConfig, type PointsConfig } from "@/lib/scoring";
+import { computeStandings, bonusPts, getRows, getCols, pointsNominalMax, type TierDef, type BonusConfig, type PointsConfig } from "@/lib/scoring";
 
 interface PointEvent {
   date: Date;
@@ -48,7 +48,7 @@ export default async function TeamPage({ params }: Props) {
             pointsConfig: true,
             submissions: {
               where: { status: { not: "REJECTED" }, teamId: { not: null } },
-              select: { teamId: true, status: true, tier: true, pointsAwarded: true },
+              select: { teamId: true, status: true, tier: true, pointsAwarded: true, dinkItemId: true },
             },
           },
         },
@@ -62,7 +62,7 @@ export default async function TeamPage({ params }: Props) {
   const submissions = board
     ? await prisma.submission.findMany({
         where: { teamId: team.id, tile: { boardId: board.id } },
-        select: { id: true, tileId: true, tier: true, status: true, source: true, teamMember: true, dinkItemName: true, imageUrl: true, note: true, createdAt: true, pointsAwarded: true },
+        select: { id: true, tileId: true, tier: true, status: true, source: true, teamMember: true, dinkItemName: true, dinkItemId: true, imageUrl: true, note: true, createdAt: true, pointsAwarded: true },
         orderBy: { createdAt: "asc" },
       })
     : [];
@@ -112,32 +112,47 @@ export default async function TeamPage({ params }: Props) {
   const events: PointEvent[] = [];
   let runningTotal = 0;
   const pointsTotalByTile = new Map<string, number>();
+  const itemsReceivedByTile = new Map<string, Set<number>>();
 
   for (const sub of approved) {
     let tile: (typeof inRangeTiles)[number] | undefined;
 
     if (sub.tier === null) {
       // Points-mode drop — unlimited duplicates, each already diminished at
-      // creation time (see lib/scoring.ts's diminishingPoints). Credit is
-      // capped at the tile's target, same as computeStandings().
+      // creation time (see lib/scoring.ts's diminishingPoints). With a
+      // target, credit is capped there (matches computeStandings()); with
+      // no target, points are uncapped and completion instead means having
+      // received at least one of every listed item.
       if (sub.pointsAwarded == null) continue;
       const cfg = pointsConfigByTile.get(sub.tileId);
       if (!cfg) continue;
+      const hasTarget = cfg.target != null;
 
       const prevTotal = pointsTotalByTile.get(sub.tileId) ?? 0;
-      if (prevTotal >= cfg.target) continue;
-      const newTotal = Math.min(prevTotal + sub.pointsAwarded, cfg.target);
+      if (hasTarget && prevTotal >= cfg.target!) continue;
+      const newTotal = hasTarget ? Math.min(prevTotal + sub.pointsAwarded, cfg.target!) : prevTotal + sub.pointsAwarded;
       pointsTotalByTile.set(sub.tileId, newTotal);
       const delta = newTotal - prevTotal;
-      if (delta <= 0) continue;
+
+      if (sub.dinkItemId != null) {
+        const received = itemsReceivedByTile.get(sub.tileId) ?? new Set<number>();
+        received.add(sub.dinkItemId);
+        itemsReceivedByTile.set(sub.tileId, received);
+      }
 
       tile = tileById.get(sub.tileId);
-      runningTotal += delta;
-      events.push({ date: sub.createdAt, delta, label: `${tile?.title ?? "Tile"} (+${+delta.toFixed(1)}pts)` });
+      if (delta > 0) {
+        runningTotal += delta;
+        events.push({ date: sub.createdAt, delta, label: `${tile?.title ?? "Tile"} (+${+delta.toFixed(1)}pts)` });
+      }
 
-      if (newTotal >= cfg.target) {
-        // Treat reaching the target as equivalent to a T1 completion for
-        // line-bonus purposes — matches getLineBonusTier in lib/scoring.ts.
+      const isComplete = hasTarget
+        ? newTotal >= cfg.target!
+        : cfg.items.length > 0 && cfg.items.every((i) => itemsReceivedByTile.get(sub.tileId)?.has(i.id));
+
+      if (isComplete) {
+        // Treat completion as equivalent to a T1 completion for line-bonus
+        // purposes — matches getLineBonusTier in lib/scoring.ts.
         const set = achievedByTile.get(sub.tileId) ?? new Set<number>();
         set.add(1);
         achievedByTile.set(sub.tileId, set);
@@ -313,7 +328,7 @@ export default async function TeamPage({ params }: Props) {
                 // achieved only once the target is fully reached, so the
                 // existing tier-based grid component can render it as-is.
                 tiers: cfg
-                  ? [{ tier: 1, points: cfg.target, requiredCount: 1 }]
+                  ? [{ tier: 1, points: pointsNominalMax(cfg), requiredCount: 1 }]
                   : ((tile.tiers as TierDef[]) ?? []).map((td) => ({ tier: td.tier, points: td.points, requiredCount: td.requiredCount })),
                 achievedTiers: [...(achievedByTile.get(tile.id) ?? new Set<number>())],
               };

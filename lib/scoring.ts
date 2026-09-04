@@ -4,7 +4,10 @@
  */
 export type TierDef = { tier: number; points: number; requiredCount: number; description?: string; dinkItems: Array<{ id: number; name: string }> };
 export type PointsItemDef = { id: number; name: string; basePoints: number };
-export type PointsConfig = { target: number; items: PointsItemDef[] };
+// target is optional — when omitted, points are uncapped ("infinite") and
+// the tile instead completes once the team has received at least one of
+// every listed item (a full collection, not a point threshold).
+export type PointsConfig = { target?: number; items: PointsItemDef[] };
 export type BonusConfig = { t1: number; t2: number; t3: number };
 
 /**
@@ -27,7 +30,7 @@ export interface TileForScoring {
   scoringMode: "TIERED" | "POINTS";
   tiers: TierDef[];
   pointsConfig: PointsConfig | null;
-  submissions: Array<{ teamId: string | null; tier: number | null; status: string; pointsAwarded: number | null }>;
+  submissions: Array<{ teamId: string | null; tier: number | null; status: string; pointsAwarded: number | null; dinkItemId: number | null }>;
 }
 
 export interface TeamForScoring {
@@ -66,6 +69,35 @@ function isConfiguredTile(t: TileForScoring | undefined): t is TileForScoring {
   return t.scoringMode === "POINTS" ? !!t.pointsConfig : t.tiers.length > 0;
 }
 
+/** A points tile's nominal "max" value — its target if it has one, or the
+ * sum of every item's base value (i.e. one of each) when uncapped. Used for
+ * the board's overall total-points denominator; an uncapped tile can still
+ * earn more than this via duplicates. */
+export function pointsNominalMax(cfg: PointsConfig): number {
+  if (cfg.target != null) return cfg.target;
+  return cfg.items.reduce((sum, i) => sum + i.basePoints, 0);
+}
+
+/** A team's progress on one points-mode tile: earned points (capped at the
+ * target if one is set, otherwise uncapped) and whether it's complete
+ * (reached the target, or — with no target — received at least one of
+ * every listed item). */
+export function pointsTileProgress(
+  cfg: PointsConfig,
+  teamSubs: Array<{ pointsAwarded: number | null; dinkItemId: number | null }>
+): { earned: number; completed: boolean; receivedItemIds: Set<number> } {
+  const total = teamSubs.reduce((sum, s) => sum + (s.pointsAwarded ?? 0), 0);
+  const receivedItemIds = new Set(teamSubs.map((s) => s.dinkItemId).filter((id): id is number => id != null));
+
+  if (cfg.target != null) {
+    const earned = Math.min(total, cfg.target);
+    return { earned, completed: earned >= cfg.target, receivedItemIds };
+  }
+
+  const completed = cfg.items.length > 0 && cfg.items.every((i) => receivedItemIds.has(i.id));
+  return { earned: total, completed, receivedItemIds };
+}
+
 /** The bonus tier a team has earned for a row/column (null = line not complete). */
 export function getLineBonusTier(tiles: TileForScoring[], positions: number[], teamId: string): number | null {
   const tileByPos = new Map(tiles.map((t) => [t.position, t]));
@@ -76,11 +108,11 @@ export function getLineBonusTier(tiles: TileForScoring[], positions: number[], t
     const teamSubs = tile!.submissions.filter((s) => s.teamId === teamId && s.status === "APPROVED");
 
     if (tile!.scoringMode === "POINTS" && tile!.pointsConfig) {
-      const total = teamSubs.reduce((sum, s) => sum + (s.pointsAwarded ?? 0), 0);
       // A points tile has one completion state, not discrete tiers — treat
-      // reaching the target as equivalent to the best (T1) tier for line
-      // bonus purposes.
-      return total >= tile!.pointsConfig.target ? 1 : null;
+      // completing it as equivalent to the best (T1) tier for line bonus
+      // purposes.
+      const { completed } = pointsTileProgress(tile!.pointsConfig, teamSubs);
+      return completed ? 1 : null;
     }
 
     const achieved = tile!.tiers
@@ -112,10 +144,9 @@ export function computeStandings(
       const teamSubs = tile.submissions.filter((s) => s.teamId === team.id && s.status === "APPROVED");
 
       if (tile.scoringMode === "POINTS" && tile.pointsConfig) {
-        const total = teamSubs.reduce((sum, s) => sum + (s.pointsAwarded ?? 0), 0);
-        const capped = Math.min(total, tile.pointsConfig.target);
-        earnedPoints += capped;
-        if (capped >= tile.pointsConfig.target) completedTiles++;
+        const { earned, completed } = pointsTileProgress(tile.pointsConfig, teamSubs);
+        earnedPoints += earned;
+        if (completed) completedTiles++;
         continue;
       }
 
@@ -136,7 +167,7 @@ export function computeStandings(
   }).sort((a, b) => b.earnedPoints - a.earnedPoints || a.name.localeCompare(b.name));
 
   const tilePts = tiles.reduce((sum, tile) => {
-    if (tile.scoringMode === "POINTS" && tile.pointsConfig) return sum + tile.pointsConfig.target;
+    if (tile.scoringMode === "POINTS" && tile.pointsConfig) return sum + pointsNominalMax(tile.pointsConfig);
     return sum + tile.tiers.reduce((s, t) => s + t.points, 0);
   }, 0);
   const maxLineBonus = Math.max(bonusConfig.t1, bonusConfig.t2, bonusConfig.t3);

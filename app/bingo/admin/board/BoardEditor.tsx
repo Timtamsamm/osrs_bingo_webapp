@@ -20,7 +20,7 @@ export interface PointsItemDef {
 }
 
 export interface PointsConfig {
-  target: number;
+  target?: number;
   items: PointsItemDef[];
 }
 
@@ -110,7 +110,7 @@ interface TileState {
   t1: TierState;
   t2: TierState;
   t3: TierState;
-  pointsTarget: number;
+  pointsTargetText: string;
   pointsItemsText: string;
 }
 
@@ -121,7 +121,7 @@ function makeTileState(t: Tile | undefined): TileState {
     return {
       title: "", description: "", imageUrl: null, scoringMode: "TIERED",
       t1: { ...EMPTY_TIER }, t2: { ...EMPTY_TIER }, t3: { ...EMPTY_TIER },
-      pointsTarget: 100, pointsItemsText: "",
+      pointsTargetText: "100", pointsItemsText: "",
     };
   }
   const tiers = t.tiers ?? [];
@@ -135,7 +135,7 @@ function makeTileState(t: Tile | undefined): TileState {
     imageUrl: t.imageUrl ?? null,
     scoringMode: t.scoringMode === "POINTS" ? "POINTS" : "TIERED",
     t1: getTier(1), t2: getTier(2), t3: getTier(3),
-    pointsTarget: t.pointsConfig?.target ?? 100,
+    pointsTargetText: t.pointsConfig ? (t.pointsConfig.target != null ? String(t.pointsConfig.target) : "") : "100",
     pointsItemsText: pointsItemsToText(t.pointsConfig?.items),
   };
 }
@@ -154,7 +154,9 @@ function stateToTiers(t: TileState): TierDef[] {
 function stateToPointsConfig(t: TileState): PointsConfig | null {
   const items = parsePointsItems(t.pointsItemsText);
   if (items.length === 0) return null;
-  return { target: t.pointsTarget, items };
+  const trimmed = t.pointsTargetText.trim();
+  const target = trimmed === "" ? undefined : Number(trimmed);
+  return { target: target != null && !isNaN(target) ? target : undefined, items };
 }
 
 interface Props {
@@ -212,8 +214,8 @@ export default function BoardEditor({ board }: Props) {
     setTiles((prev) => ({ ...prev, [pos]: { ...prev[pos], scoringMode: mode } }));
   }
 
-  function setPointsTarget(pos: number, value: number) {
-    setTiles((prev) => ({ ...prev, [pos]: { ...prev[pos], pointsTarget: value } }));
+  function setPointsTarget(pos: number, value: string) {
+    setTiles((prev) => ({ ...prev, [pos]: { ...prev[pos], pointsTargetText: value } }));
   }
 
   function updateTier(pos: number, tierKey: "t1" | "t2" | "t3", field: keyof TierState, value: string | number) {
@@ -430,7 +432,7 @@ export default function BoardEditor({ board }: Props) {
                     <span className="text-[8px] text-purple-500 mt-0.5">{stateToTiers(t).map(td => `T${td.tier}`).join(" ")}</span>
                   )}
                   {hasPointsItems && (
-                    <span className="text-[8px] text-emerald-500 mt-0.5">{t.pointsTarget}pt</span>
+                    <span className="text-[8px] text-emerald-500 mt-0.5">{t.pointsTargetText.trim() ? `${t.pointsTargetText}pt` : "∞"}</span>
                   )}
                 </button>
               );
@@ -492,19 +494,29 @@ export default function BoardEditor({ board }: Props) {
 
               {selectedTile!.scoringMode === "POINTS" ? (
                 <div className="flex flex-col gap-1.5">
-                  <div className="flex items-end gap-3">
+                  <div className="flex items-end gap-2">
                     <div className="flex flex-col gap-1 w-32 shrink-0">
-                      <label className={labelCls}>Target points</label>
+                      <label className={labelCls}>Target points (optional)</label>
                       <input
                         type="number"
                         min={1}
                         step={1}
-                        value={selectedTile!.pointsTarget}
-                        onChange={(e) => setPointsTarget(selected, Number(e.target.value))}
+                        placeholder="Unlimited"
+                        value={selectedTile!.pointsTargetText}
+                        onChange={(e) => setPointsTarget(selected, e.target.value)}
                         className={inputCls}
                       />
                     </div>
-                    <p className="text-[11px] text-purple-700/60 pb-2">Total points a team needs to complete this tile.</p>
+                    {selectedTile!.pointsTargetText && (
+                      <button type="button" onClick={() => setPointsTarget(selected, "")} className="text-xs text-purple-600 hover:text-red-400 transition-colors pb-2">
+                        Clear
+                      </button>
+                    )}
+                    <p className="text-[11px] text-purple-700/60 pb-2">
+                      {selectedTile!.pointsTargetText.trim()
+                        ? "Total points a team needs to complete this tile."
+                        : "No target — points are unlimited. The tile completes once a team has received at least 1 of every item below."}
+                    </p>
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className={labelCls}>Items (id, base points, name)</label>
