@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import ImageCropper from "@/app/components/ImageCropper";
+import { DndContext, DragOverlay, useDraggable, useDroppable, PointerSensor, useSensor, useSensors, type DragStartEvent, type DragEndEvent } from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
 
 export interface TierDef {
   tier: 1 | 2 | 3;
@@ -49,6 +51,7 @@ interface Board {
 }
 
 const BOARD_SIZES = [3, 4, 5] as const;
+const MAX_SIZE = 5;
 const GRID_COLS_CLASS: Record<number, string> = { 3: "grid-cols-3", 4: "grid-cols-4", 5: "grid-cols-5" };
 
 function parseDinkItems(text: string): Array<{ id: number; name: string }> {
@@ -160,6 +163,33 @@ function stateToPointsConfig(t: TileState): PointsConfig | null {
   return { target: target != null && !isNaN(target) ? target : undefined, items };
 }
 
+/**
+ * Maps each of the 25 visual cells (always a compact 5×5 admin canvas, in
+ * row-major order) to the real tile position it should show. The active
+ * boardSize×boardSize square goes in the top-left, using the exact same
+ * `row*boardSize+col` numbering the real public board uses (see
+ * getRows/getCols in lib/scoring.ts) — so a tile dragged within that square
+ * ends up in the identical row/col on the real board. Everything else (the
+ * L-shaped remainder of the 5×5 canvas) is filled in sequence with the
+ * tiles that are hidden at the current board size, which have no real
+ * row/col of their own to show.
+ */
+function buildAdminGridLayout(boardSize: number): Array<{ position: number; isActive: boolean }> {
+  const layout: Array<{ position: number; isActive: boolean }> = [];
+  let nextHiddenPos = boardSize * boardSize;
+  for (let row = 0; row < MAX_SIZE; row++) {
+    for (let col = 0; col < MAX_SIZE; col++) {
+      if (row < boardSize && col < boardSize) {
+        layout.push({ position: row * boardSize + col, isActive: true });
+      } else {
+        layout.push({ position: nextHiddenPos, isActive: false });
+        nextHiddenPos++;
+      }
+    }
+  }
+  return layout;
+}
+
 interface Props {
   board: Board | null;
 }
@@ -172,6 +202,61 @@ const TIER_META: Record<"t1" | "t2" | "t3", { num: 1 | 2 | 3; label: string; hin
   t2: { num: 2, label: "T2", hint: "" },
   t1: { num: 1, label: "T1", hint: "Most valuable drops" },
 };
+
+function TileCell({
+  pos,
+  tile,
+  isSelected,
+  isActive,
+  onSelect,
+}: {
+  pos: number;
+  tile: TileState;
+  isSelected: boolean;
+  isActive: boolean;
+  onSelect: () => void;
+}) {
+  const { attributes, listeners, setNodeRef: setDragRef, transform, isDragging } = useDraggable({ id: pos });
+  const { setNodeRef: setDropRef, isOver } = useDroppable({ id: pos });
+
+  const filled = tile.title.trim().length > 0;
+  const isPoints = tile.scoringMode === "POINTS";
+  const hasTiers = filled && !isPoints && stateToTiers(tile).length > 0;
+  const hasPointsItems = filled && isPoints && parsePointsItems(tile.pointsItemsText).length > 0;
+
+  const style: React.CSSProperties = {
+    transform: transform ? CSS.Translate.toString(transform) : undefined,
+    zIndex: isDragging ? 20 : undefined,
+  };
+
+  return (
+    <button
+      ref={(node) => { setDragRef(node); setDropRef(node); }}
+      style={style}
+      {...listeners}
+      {...attributes}
+      onClick={onSelect}
+      className={`touch-none w-14 h-14 rounded-lg border text-xs font-medium flex flex-col items-center justify-center p-1 text-center transition-all duration-150 ${
+        isDragging ? "opacity-30 scale-95" : isOver ? "scale-110 ring-2 ring-purple-400" : ""
+      } ${!isActive ? "opacity-35 grayscale" : ""} ${
+        isSelected
+          ? "border-purple-400 bg-purple-400/10 text-purple-200"
+          : filled
+          ? "border-purple-700/50 bg-[#130a28] text-purple-200"
+          : "border-dashed border-purple-900/50 bg-[#0e0820] text-purple-700"
+      }`}
+    >
+      <span className="line-clamp-2 leading-tight">{filled ? tile.title : pos + 1}</span>
+      {hasTiers && (
+        <span className="text-[8px] text-purple-500 mt-0.5">{stateToTiers(tile).map((td) => `T${td.tier}`).join(" ")}</span>
+      )}
+      {hasPointsItems && (
+        <span className="text-[8px] text-emerald-500 mt-0.5">{tile.pointsTargetText.trim() ? `${tile.pointsTargetText}pt` : "∞"}</span>
+      )}
+      {!isActive && <span className="text-[7px] text-purple-800 mt-0.5">hidden</span>}
+    </button>
+  );
+}
 
 export default function BoardEditor({ board }: Props) {
   const router = useRouter();
@@ -198,7 +283,7 @@ export default function BoardEditor({ board }: Props) {
 
   const [tiles, setTiles] = useState<Record<number, TileState>>(() => {
     const map: Record<number, TileState> = {};
-    for (let i = 0; i < 25; i++) {
+    for (let i = 0; i < MAX_SIZE * MAX_SIZE; i++) {
       map[i] = makeTileState(board?.tiles.find((t) => t.position === i));
     }
     return map;
@@ -207,6 +292,39 @@ export default function BoardEditor({ board }: Props) {
   const [selected, setSelected] = useState<number | null>(null);
   const [imageUploading, setImageUploading] = useState(false);
   const [cropSrc, setCropSrc] = useState<{ pos: number; src: string } | null>(null);
+  const [dragPos, setDragPos] = useState<number | null>(null);
+  const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+  // dnd-kit generates an internal accessibility id whose value can differ
+  // between the server-rendered HTML and the client's first render,
+  // producing a hydration mismatch — only mount the DnD-enabled grid once
+  // we're definitely running in the browser, since it's a pure admin
+  // interaction with nothing meaningful to server-render anyway.
+  const [dndReady, setDndReady] = useState(false);
+  useEffect(() => setDndReady(true), []);
+  const gridLayout = useMemo(() => buildAdminGridLayout(boardSize), [boardSize]);
+
+  function handleDragStart(event: DragStartEvent) {
+    setDragPos(Number(event.active.id));
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    setDragPos(null);
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const fromPos = Number(active.id);
+    const toPos = Number(over.id);
+    setTiles((prev) => {
+      const next = { ...prev };
+      next[fromPos] = prev[toPos];
+      next[toPos] = prev[fromPos];
+      return next;
+    });
+    setSelected((prevSelected) => {
+      if (prevSelected === fromPos) return toPos;
+      if (prevSelected === toPos) return fromPos;
+      return prevSelected;
+    });
+  }
 
   function updateTile(pos: number, field: "title" | "description" | "pointsItemsText", value: string) {
     setTiles((prev) => ({ ...prev, [pos]: { ...prev[pos], [field]: value } }));
@@ -423,39 +541,57 @@ export default function BoardEditor({ board }: Props) {
       </div>
 
       <div className="flex gap-4">
-        {/* size×size grid */}
+        {/* All 25 tiles, wrapped at the *current* board width — so the
+            active boardSize×boardSize square always matches the real
+            public board's own row/col wrapping exactly. Cells beyond that
+            are greyed out but still draggable/selectable, so hidden tile
+            content can be browsed or repositioned without resizing first. */}
         <div className="flex flex-col gap-1.5 shrink-0">
-          <p className="text-xs text-purple-500">Click a tile to edit it</p>
-          <div className={`grid ${GRID_COLS_CLASS[boardSize]} gap-1`}>
-            {Array.from({ length: boardSize * boardSize }, (_, i) => {
-              const t = tiles[i];
-              const filled = t.title.trim().length > 0;
-              const isPoints = t.scoringMode === "POINTS";
-              const hasTiers = filled && !isPoints && stateToTiers(t).length > 0;
-              const hasPointsItems = filled && isPoints && parsePointsItems(t.pointsItemsText).length > 0;
-              return (
-                <button
-                  key={i}
-                  onClick={() => setSelected(i === selected ? null : i)}
-                  className={`w-14 h-14 rounded-lg border text-xs font-medium flex flex-col items-center justify-center p-1 text-center transition-all ${
-                    selected === i
-                      ? "border-purple-400 bg-purple-400/10 text-purple-200"
-                      : filled
-                      ? "border-purple-700/50 bg-[#130a28] text-purple-200"
-                      : "border-dashed border-purple-900/50 bg-[#0e0820] text-purple-700"
-                  }`}
-                >
-                  <span className="line-clamp-2 leading-tight">{filled ? t.title : i + 1}</span>
-                  {hasTiers && (
-                    <span className="text-[8px] text-purple-500 mt-0.5">{stateToTiers(t).map(td => `T${td.tier}`).join(" ")}</span>
-                  )}
-                  {hasPointsItems && (
-                    <span className="text-[8px] text-emerald-500 mt-0.5">{t.pointsTargetText.trim() ? `${t.pointsTargetText}pt` : "∞"}</span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+          <p className="text-xs text-purple-500">Drag to reposition · click to edit</p>
+          {dndReady ? (
+            <DndContext sensors={dndSensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+              <div className={`grid ${GRID_COLS_CLASS[MAX_SIZE]} gap-1`}>
+                {gridLayout.map(({ position, isActive }, visualIndex) => (
+                  <TileCell
+                    key={visualIndex}
+                    pos={position}
+                    tile={tiles[position]}
+                    isSelected={selected === position}
+                    isActive={isActive}
+                    onSelect={() => setSelected(position === selected ? null : position)}
+                  />
+                ))}
+              </div>
+              <DragOverlay dropAnimation={{ duration: 200, easing: "cubic-bezier(0.18, 0.67, 0.6, 1.22)" }}>
+                {dragPos !== null && (
+                  <div className="w-14 h-14 rounded-lg border-2 border-purple-400 bg-[#1a0f35] shadow-2xl shadow-purple-950/80 flex items-center justify-center p-1 text-center text-xs font-medium text-purple-100 rotate-3 scale-110">
+                    <span className="line-clamp-2 leading-tight">{tiles[dragPos].title.trim() || dragPos + 1}</span>
+                  </div>
+                )}
+              </DragOverlay>
+            </DndContext>
+          ) : (
+            // Static placeholder for the server-rendered/pre-hydration pass —
+            // dnd-kit's hooks are skipped entirely here to avoid a hydration
+            // mismatch, then swapped for the interactive grid once mounted.
+            <div className={`grid ${GRID_COLS_CLASS[MAX_SIZE]} gap-1`}>
+              {gridLayout.map(({ position, isActive }, visualIndex) => {
+                const t = tiles[position];
+                const filled = t.title.trim().length > 0;
+                return (
+                  <div
+                    key={visualIndex}
+                    className={`w-14 h-14 rounded-lg border text-xs font-medium flex flex-col items-center justify-center p-1 text-center ${
+                      !isActive ? "opacity-35 grayscale" : ""
+                    } ${filled ? "border-purple-700/50 bg-[#130a28] text-purple-200" : "border-dashed border-purple-900/50 bg-[#0e0820] text-purple-700"}`}
+                  >
+                    <span className="line-clamp-2 leading-tight">{filled ? t.title : position + 1}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <p className="text-[10px] text-purple-700/60 max-w-[15rem]">Greyed-out tiles are outside the current board size — hidden from players, not deleted.</p>
         </div>
 
         {/* Tile editor */}
