@@ -273,6 +273,18 @@ export default function BoardEditor({ board }: Props) {
   const [bonusT2, setBonusT2] = useState(board?.rowColBonuses?.t2 ?? 0);
   const [bonusT3, setBonusT3] = useState(board?.rowColBonuses?.t3 ?? 0);
   const [scaleByTeamSize, setScaleByTeamSize] = useState(board?.scaleByTeamSize ?? false);
+  // Read only in an effect (not during render) so the server-rendered pass
+  // and the client's pre-hydration first render both show "" — matching the
+  // dndReady pattern below to avoid a hydration mismatch.
+  const [siteOrigin, setSiteOrigin] = useState("");
+  useEffect(() => setSiteOrigin(window.location.origin), []);
+  const [copiedField, setCopiedField] = useState<"webhook" | "config" | null>(null);
+  const copyToClipboard = useCallback((field: "webhook" | "config", text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedField(field);
+      setTimeout(() => setCopiedField((f) => (f === field ? null : f)), 1500);
+    });
+  }, []);
 
   const generateDinkToken = useCallback(() => {
     const token = Array.from(crypto.getRandomValues(new Uint8Array(18)))
@@ -453,11 +465,33 @@ export default function BoardEditor({ board }: Props) {
             )}
           </div>
           {boardDinkToken && (
-            <p className="text-xs text-purple-600 font-mono break-all">
-              Webhook URL: <span className="text-purple-400/80 select-all">/api/webhook/dink?token={boardDinkToken}</span>
-            </p>
+            <div className="flex flex-col gap-2 mt-1">
+              {([
+                { key: "webhook" as const, label: "Webhook URL", path: "/api/webhook/dink", hint: "Players paste this into Dink → Settings → Webhook URLs." },
+                { key: "config" as const, label: "Dynamic Config URL", path: "/api/dink-config", hint: "Players paste this into Dink → Settings → Advanced → Dynamic Config URL. Sets up loot filters + this webhook automatically." },
+              ]).map(({ key, label, path, hint }) => {
+                const url = `${siteOrigin}${path}?token=${boardDinkToken}`;
+                return (
+                  <div key={key} className="flex flex-col gap-0.5">
+                    <label className="text-[10px] text-purple-600 uppercase tracking-wide">{label}</label>
+                    <div className="flex gap-2 items-center">
+                      <span className="text-xs text-purple-400/80 font-mono break-all select-all bg-[#0e0820] border border-purple-900/40 rounded-lg px-2.5 py-1.5 flex-1">
+                        {url}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(key, url)}
+                        className="text-xs bg-purple-900/50 hover:bg-purple-800/60 border border-purple-700/40 text-purple-300 rounded-lg px-3 py-1.5 transition-colors shrink-0"
+                      >
+                        {copiedField === key ? "Copied!" : "Copy"}
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-purple-700/60">{hint}</p>
+                  </div>
+                );
+              })}
+            </div>
           )}
-          <p className="text-[11px] text-purple-700/60">Players paste this URL into Dink → Webhook URLs. Drops matching tile item IDs auto-approve.</p>
         </div>
 
         {/* Row / Column completion bonus */}
