@@ -277,12 +277,13 @@ export default function BoardEditor({ board }: Props) {
   // and the client's pre-hydration first render both show "" — matching the
   // dndReady pattern below to avoid a hydration mismatch.
   const [siteOrigin, setSiteOrigin] = useState("");
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setSiteOrigin(window.location.origin), []);
-  const [copiedField, setCopiedField] = useState<"webhook" | "config" | null>(null);
-  const copyToClipboard = useCallback((field: "webhook" | "config", text: string) => {
+  const [copied, setCopied] = useState(false);
+  const copyToClipboard = useCallback((text: string) => {
     navigator.clipboard.writeText(text).then(() => {
-      setCopiedField(field);
-      setTimeout(() => setCopiedField((f) => (f === field ? null : f)), 1500);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
     });
   }, []);
 
@@ -312,6 +313,7 @@ export default function BoardEditor({ board }: Props) {
   // we're definitely running in the browser, since it's a pure admin
   // interaction with nothing meaningful to server-render anyway.
   const [dndReady, setDndReady] = useState(false);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setDndReady(true), []);
   const gridLayout = useMemo(() => buildAdminGridLayout(boardSize), [boardSize]);
 
@@ -464,34 +466,27 @@ export default function BoardEditor({ board }: Props) {
               </button>
             )}
           </div>
-          {boardDinkToken && (
-            <div className="flex flex-col gap-2 mt-1">
-              {([
-                { key: "webhook" as const, label: "Webhook URL", path: "/api/webhook/dink", hint: "Players paste this into Dink → Settings → Webhook URLs." },
-                { key: "config" as const, label: "Dynamic Config URL", path: "/api/dink-config", hint: "Players paste this into Dink → Settings → Advanced → Dynamic Config URL. Sets up loot filters + this webhook automatically." },
-              ]).map(({ key, label, path, hint }) => {
-                const url = `${siteOrigin}${path}?token=${boardDinkToken}`;
-                return (
-                  <div key={key} className="flex flex-col gap-0.5">
-                    <label className="text-[10px] text-purple-600 uppercase tracking-wide">{label}</label>
-                    <div className="flex gap-2 items-center">
-                      <span className="text-xs text-purple-400/80 font-mono break-all select-all bg-[#0e0820] border border-purple-900/40 rounded-lg px-2.5 py-1.5 flex-1">
-                        {url}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => copyToClipboard(key, url)}
-                        className="text-xs bg-purple-900/50 hover:bg-purple-800/60 border border-purple-700/40 text-purple-300 rounded-lg px-3 py-1.5 transition-colors shrink-0"
-                      >
-                        {copiedField === key ? "Copied!" : "Copy"}
-                      </button>
-                    </div>
-                    <p className="text-[11px] text-purple-700/60">{hint}</p>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          {boardDinkToken && (() => {
+            const url = `${siteOrigin}/api/dink-config?token=${boardDinkToken}`;
+            return (
+              <div className="flex flex-col gap-0.5 mt-1">
+                <label className="text-[10px] text-purple-600 uppercase tracking-wide">Dynamic Config URL</label>
+                <div className="flex gap-2 items-center">
+                  <span className="text-xs text-purple-400/80 font-mono break-all select-all bg-[#0e0820] border border-purple-900/40 rounded-lg px-2.5 py-1.5 flex-1">
+                    {url}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(url)}
+                    className="text-xs bg-purple-900/50 hover:bg-purple-800/60 border border-purple-700/40 text-purple-300 rounded-lg px-3 py-1.5 transition-colors shrink-0"
+                  >
+                    {copied ? "Copied!" : "Copy"}
+                  </button>
+                </div>
+                <p className="text-[11px] text-purple-700/60">Players paste this into Dink → Settings → Advanced → Dynamic Config URL — it sets up loot filters and the webhook automatically, nothing else to configure.</p>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Row / Column completion bonus */}
