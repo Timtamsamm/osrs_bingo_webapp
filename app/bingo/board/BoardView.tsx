@@ -329,7 +329,7 @@ function TileDetailModal({ tile, teams, scaleByTeamSize, onClose }: { tile: Tile
           {tile.description && (
             <div className="flex flex-col gap-1">
               <p className="text-xs tracking-[0.2em] text-purple-500 uppercase font-semibold">Tile Objective</p>
-              <p className="text-sm text-purple-300/80">{tile.description}</p>
+              <p className="text-sm text-purple-300/80 whitespace-pre-line">{tile.description}</p>
             </div>
           )}
 
