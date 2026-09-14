@@ -241,6 +241,43 @@ const TIER_ACCENT: Record<number, string> = {
   3: "border-l-emerald-500",
 };
 
+const ITEM_LIST_THRESHOLD = 8;
+
+function CollapsibleItemList<T>({
+  items,
+  keyFn,
+  renderItem,
+  threshold = ITEM_LIST_THRESHOLD,
+}: {
+  items: T[];
+  keyFn: (item: T) => string | number;
+  renderItem: (item: T) => React.ReactNode;
+  threshold?: number;
+}) {
+  if (items.length <= threshold) {
+    return (
+      <div className="flex flex-wrap gap-1.5">
+        {items.map((item) => (
+          <span key={keyFn(item)}>{renderItem(item)}</span>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <details className="group">
+      <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden flex items-center gap-1.5 text-xs text-purple-400 hover:text-purple-200 transition-colors select-none">
+        <span className="inline-block transition-transform duration-150 group-open:rotate-90">▸</span>
+        {items.length} items — click to expand
+      </summary>
+      <div className="flex flex-wrap gap-1.5 mt-2">
+        {items.map((item) => (
+          <span key={keyFn(item)}>{renderItem(item)}</span>
+        ))}
+      </div>
+    </details>
+  );
+}
+
 function TileDetailModal({ tile, teams, scaleByTeamSize, onClose }: { tile: TileSummary; teams: TeamInfo[]; scaleByTeamSize: boolean; onClose: () => void }) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -267,7 +304,10 @@ function TileDetailModal({ tile, teams, scaleByTeamSize, onClose }: { tile: Tile
         onClick={(e) => e.stopPropagation()}
       >
         {tile.imageUrl && (
-          <div className="relative w-full h-32 overflow-hidden">
+          // Tile images are always cropped to 1:1 on upload (see ImageCropper's
+          // default aspect), so a square frame here shows the whole image with
+          // no cropping or letterboxing.
+          <div className="relative w-full aspect-square overflow-hidden">
             <Image src={tile.imageUrl} alt={tile.title} fill sizes="400px" className="object-cover" />
             <div className="absolute inset-0 bg-gradient-to-t from-[#0e0820] via-transparent to-transparent" />
           </div>
@@ -297,20 +337,22 @@ function TileDetailModal({ tile, teams, scaleByTeamSize, onClose }: { tile: Tile
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between gap-3">
                 <p className="text-xs tracking-[0.2em] text-purple-500 uppercase font-semibold">Items</p>
-                <span className="text-sm font-semibold text-white">
-                  {tile.pointsTarget != null ? `${+tile.pointsTarget.toFixed(1)} pts to complete` : "Collect 1 of each to complete"}
-                </span>
+                {tile.pointsTarget != null && (
+                  <span className="text-sm font-semibold text-white">{+tile.pointsTarget.toFixed(1)} pts to complete</span>
+                )}
               </div>
               {tile.pointsItems.length === 0 ? (
                 <p className="text-sm text-purple-600/70">No items configured yet.</p>
               ) : (
-                <div className="flex flex-wrap gap-1.5">
-                  {tile.pointsItems.map((item) => (
-                    <span key={item.id} className="text-xs text-purple-200 bg-purple-900/40 border border-purple-700/30 rounded-full px-2 py-0.5">
+                <CollapsibleItemList
+                  items={tile.pointsItems}
+                  keyFn={(item) => item.id}
+                  renderItem={(item) => (
+                    <span className="text-xs text-purple-200 bg-purple-900/40 border border-purple-700/30 rounded-full px-2 py-0.5">
                       {item.name} <span className="text-purple-400">· {+item.basePoints.toFixed(1)}pt</span>
                     </span>
-                  ))}
-                </div>
+                  )}
+                />
               )}
               <p className="text-[11px] text-purple-700/60">Duplicate drops of the same item are worth less each time (halves twice, then stays at 25% of its base value), so a mix of items completes it fastest.</p>
               {scaleByTeamSize && (
@@ -337,13 +379,15 @@ function TileDetailModal({ tile, teams, scaleByTeamSize, onClose }: { tile: Tile
                     </div>
                     {td.description && <p className="text-xs text-purple-400/70 whitespace-pre-line">{td.description}</p>}
                     {td.items.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5">
-                        {td.items.map((name) => (
-                          <span key={name} className="text-xs text-purple-200 bg-purple-900/40 border border-purple-700/30 rounded-full px-2 py-0.5">
+                      <CollapsibleItemList
+                        items={td.items}
+                        keyFn={(name) => name}
+                        renderItem={(name) => (
+                          <span className="text-xs text-purple-200 bg-purple-900/40 border border-purple-700/30 rounded-full px-2 py-0.5">
                             {name}
                           </span>
-                        ))}
-                      </div>
+                        )}
+                      />
                     )}
                   </div>
                 ))
