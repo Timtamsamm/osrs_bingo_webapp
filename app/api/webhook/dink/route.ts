@@ -178,6 +178,27 @@ export async function POST(req: NextRequest) {
     const pointsMatch = itemToPointsTile.get(item.id);
     if (pointsMatch) {
       const { tileId, tileTitle, basePoints } = pointsMatch;
+
+      // Dink can send a LOOT notification and a separate COLLECTION
+      // notification for the same physical pickup (when the item is both a
+      // fresh drop and a new collection log entry) — two webhook calls for
+      // one real event. Points tiles allow genuine unlimited duplicates, so
+      // they can't just reject repeats outright like tiered tiles do; instead,
+      // treat an identical item from the same player on the same tile within
+      // a few seconds as one drop reported twice, not two drops.
+      const justRecorded = await prisma.submission.findFirst({
+        where: {
+          teamId,
+          tileId,
+          dinkItemId: item.id,
+          teamMember: playerName,
+          status: { not: "REJECTED" },
+          createdAt: { gte: new Date(now.getTime() - 15_000) },
+        },
+        select: { id: true },
+      });
+      if (justRecorded) continue;
+
       const priorCount = await prisma.submission.count({
         where: { teamId, tileId, dinkItemId: item.id, status: { not: "REJECTED" } },
       });
