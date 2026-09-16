@@ -343,6 +343,7 @@ export default async function TeamPage({ params }: Props) {
                   ? [{ tier: 1, points: pointsNominalMax(cfg), requiredCount: 1 }]
                   : ((tile.tiers as TierDef[]) ?? []).map((td) => ({ tier: td.tier, points: td.points, requiredCount: td.requiredCount })),
                 achievedTiers: [...(achievedByTile.get(tile.id) ?? new Set<number>())],
+                isUncappedPoints: !!cfg && cfg.target == null,
               };
             })}
           />

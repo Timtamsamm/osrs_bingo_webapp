@@ -7,6 +7,10 @@ export interface TeamBoardTile {
   imageUrl: string | null;
   tiers: { tier: number; points: number; requiredCount: number }[];
   achievedTiers: number[];
+  // A points-mode tile with no target has no real cap — its "points" value
+  // here is just a nominal figure, so showing it as X/Y implies a ceiling
+  // that doesn't actually exist.
+  isUncappedPoints?: boolean;
 }
 
 interface Props {
@@ -78,9 +82,11 @@ export default function TeamBoardGrid({ tiles, size, teamColor }: Props) {
                   ) : (
                     <span />
                   )}
-                  <span className="text-[10px] text-purple-300/70 tabular-nums shrink-0">
-                    {+earnedPoints.toFixed(1)}/{+totalPoints.toFixed(1)}pt
-                  </span>
+                  {!tile.isUncappedPoints && (
+                    <span className="text-[10px] text-purple-300/70 tabular-nums shrink-0">
+                      {+earnedPoints.toFixed(1)}/{+totalPoints.toFixed(1)}pt
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
