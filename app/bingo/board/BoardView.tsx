@@ -545,21 +545,6 @@ export default function BoardView({ tiles, teams, rowSummaries, colSummaries, bo
         )}
       </div>
 
-      {/* Legend */}
-      {teams.length > 0 && (
-        <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-6 text-xs text-purple-600/70">
-          {teams.map((team) => (
-            <span key={team.id} className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full" style={{ background: team.color, boxShadow: `0 0 4px ${team.color}` }} />
-              {team.name}
-            </span>
-          ))}
-          <span className="text-purple-800 ml-2">
-            · filled = T1 complete · half = lower tier done · outline = not started
-            {hasLineBonuses && " · tier badge = row/col bonus"}
-          </span>
-        </div>
-      )}
 
       {detailTile && <TileDetailModal tile={detailTile} teams={teams} scaleByTeamSize={scaleByTeamSize} onClose={() => setDetailTile(null)} />}
     </div>
