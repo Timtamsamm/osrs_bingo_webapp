@@ -201,16 +201,22 @@ export default async function BoardPage() {
                       {medals[i] ?? <span className="text-purple-700 text-sm">{i + 1}</span>}
                     </span>
                     <span className="w-2.5 h-2.5 rounded-full shrink-0 ring-1 ring-white/10" style={{ background: team.color, boxShadow: `0 0 6px ${team.color}80` }} />
-                    <Link href={`/bingo/team/${team.id}`} className="text-sm font-semibold text-white flex-1 truncate hover:underline">{team.name}</Link>
-                    <div className="hidden sm:flex items-center gap-2 w-36">
-                      <div className="flex-1 h-1.5 bg-purple-950/60 rounded-full overflow-hidden">
+                    {/* Fixed width (not flex-1) so the bar's position/width
+                        after it stays identical row to row regardless of
+                        name length — it gets to grow into the leftover
+                        space instead. */}
+                    <Link href={`/bingo/team/${team.id}`} className="text-sm font-semibold text-white w-28 shrink-0 truncate hover:underline">{team.name}</Link>
+                    <div className="hidden sm:flex items-center gap-2 flex-1 min-w-0">
+                      <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
                         <div className="h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(pct, 100)}%`, background: team.color, boxShadow: `0 0 4px ${team.color}` }} />
                       </div>
                     </div>
                     <div className="flex items-center gap-3 shrink-0 text-right">
-                      <span className="text-xs tabular-nums">
+                      {/* Fixed width so its digit count can't shift where the
+                          bar above starts. */}
+                      <span className="text-xs tabular-nums w-16 shrink-0 inline-block whitespace-nowrap">
                         <span className="font-bold text-sm" style={{ color: team.color }}>{+team.earnedPoints.toFixed(1)}</span>
-                        <span className="text-purple-600"> / {+totalPoints.toFixed(1)} pts</span>
+                        <span className="text-purple-600"> pts</span>
                       </span>
                       <span className="text-xs text-purple-600 tabular-nums w-16 text-right hidden sm:block">
                         {team.completedTiles}/{totalTiles} tiles

@@ -95,14 +95,14 @@ export default async function TeamsPage() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-white truncate">{team.name}</p>
                     <div className="flex items-center gap-2 mt-1.5">
-                      <div className="flex-1 h-1.5 bg-purple-950/60 rounded-full overflow-hidden max-w-[120px]">
+                      <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden max-w-[120px]">
                         <div className="h-full rounded-full" style={{ width: `${Math.min(pct, 100)}%`, background: team.color, boxShadow: `0 0 4px ${team.color}` }} />
                       </div>
                       <span className="text-[11px] text-purple-600 tabular-nums">{memberCountById.get(team.id) ?? 0} members</span>
                     </div>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="text-sm font-bold tabular-nums" style={{ color: team.color }}>{+team.earnedPoints.toFixed(1)}<span className="text-purple-600 font-normal"> / {+totalPoints.toFixed(1)}</span></p>
+                    <p className="text-sm font-bold tabular-nums" style={{ color: team.color }}>{+team.earnedPoints.toFixed(1)}</p>
                     <p className="text-[11px] text-purple-600 tabular-nums">{team.completedTiles}/{totalTiles} tiles</p>
                   </div>
                 </Link>

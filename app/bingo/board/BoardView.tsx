@@ -60,8 +60,6 @@ export type BonusConfig = {
   t3: number;
 };
 
-type View = "grid" | "list";
-
 interface Props {
   tiles: TileSummary[];
   teams: TeamInfo[];
@@ -414,10 +412,10 @@ function TileDetailModal({ tile, teams, scaleByTeamSize, onClose }: { tile: Tile
                         <div key={team.id} className="flex items-center gap-2 text-sm">
                           <span className="w-2 h-2 rounded-full shrink-0" style={{ background: team.color, boxShadow: `0 0 4px ${team.color}` }} />
                           <span className="text-purple-200 flex-1 truncate">{team.name}</span>
-                          <div className="w-16 h-1.5 bg-purple-950/60 rounded-full overflow-hidden shrink-0">
+                          <div className="w-16 h-1.5 bg-white/10 rounded-full overflow-hidden shrink-0">
                             <div className="h-full rounded-full" style={{ width: `${pct}%`, background: team.color }} />
                           </div>
-                          <span className="text-xs text-purple-500 shrink-0 tabular-nums">{+earned.toFixed(1)}/{+target.toFixed(1)}</span>
+                          <span className="text-xs text-purple-500 shrink-0 tabular-nums w-20 inline-block text-right whitespace-nowrap">{+earned.toFixed(1)}/{+target.toFixed(1)}</span>
                         </div>
                       );
                     }
@@ -452,21 +450,7 @@ function TileDetailModal({ tile, teams, scaleByTeamSize, onClose }: { tile: Tile
 }
 
 export default function BoardView({ tiles, teams, rowSummaries, colSummaries, bonusConfig, size, scaleByTeamSize = false }: Props) {
-  const [view, setView] = useState<View>("grid");
   const [detailTile, setDetailTile] = useState<TileSummary | null>(null);
-
-  useEffect(() => {
-    const saved = localStorage.getItem("boardView") as View | null;
-    // localStorage isn't available during SSR, so the saved preference can only
-    // be restored after mount — this one-time sync is the exception to the rule.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (saved === "grid" || saved === "list") setView(saved);
-  }, []);
-
-  function switchView(v: View) {
-    setView(v);
-    localStorage.setItem("boardView", v);
-  }
 
   const hasLineBonuses = bonusConfig.t1 > 0 || bonusConfig.t2 > 0 || bonusConfig.t3 > 0;
 
@@ -476,155 +460,90 @@ export default function BoardView({ tiles, teams, rowSummaries, colSummaries, bo
 
   return (
     <div>
-      {/* View toggle */}
-      <div className="flex justify-end mb-3">
-        <div className="flex rounded-lg border border-purple-900/50 overflow-hidden">
-          <button
-            type="button"
-            onClick={() => switchView("grid")}
-            title="Grid view"
-            className={`px-3 py-1.5 text-xs font-medium transition-colors ${view === "grid" ? "text-white" : "bg-transparent text-purple-600 hover:text-purple-300"}`}
-            style={view === "grid" ? { backgroundColor: "rgb(var(--accent) / 0.25)", color: "rgb(var(--accent))" } : undefined}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-              <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
-              <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
-            </svg>
-          </button>
-          <button
-            type="button"
-            onClick={() => switchView("list")}
-            title="List view"
-            className={`px-3 py-1.5 text-xs font-medium transition-colors border-l border-purple-900/50 ${view === "list" ? "text-white" : "bg-transparent text-purple-600 hover:text-purple-300"}`}
-            style={view === "list" ? { backgroundColor: "rgb(var(--accent) / 0.25)", color: "rgb(var(--accent))" } : undefined}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-              <rect x="3" y="5" width="18" height="2" rx="1"/><rect x="3" y="11" width="18" height="2" rx="1"/><rect x="3" y="17" width="18" height="2" rx="1"/>
-            </svg>
-          </button>
-        </div>
-      </div>
-
-      {/* Grid view */}
-      {view === "grid" && (
-        <div
-          className="grid gap-3"
-          style={{ gridTemplateColumns: hasLineBonuses ? `repeat(${size}, 1fr) 2rem` : `repeat(${size}, 1fr)` }}
-        >
-          {/* `size` rows of tiles */}
-          {indices.flatMap((rowIdx) => {
-            const tileCells = indices.map((colIdx) => {
-              const pos = rowIdx * size + colIdx;
-              const tile = tileByPos.get(pos);
-              if (!tile) {
-                return (
-                  <div
-                    key={`empty-${pos}`}
-                    className="rounded-xl border border-purple-900/20 bg-surface/20"
-                    style={{ aspectRatio: "1/1" }}
-                  />
-                );
-              }
-              const glow = tileGlowClass(tile);
+      <div
+        className="grid gap-3"
+        style={{ gridTemplateColumns: hasLineBonuses ? `repeat(${size}, 1fr) 2rem` : `repeat(${size}, 1fr)` }}
+      >
+        {/* `size` rows of tiles */}
+        {indices.flatMap((rowIdx) => {
+          const tileCells = indices.map((colIdx) => {
+            const pos = rowIdx * size + colIdx;
+            const tile = tileByPos.get(pos);
+            if (!tile) {
               return (
                 <div
-                  key={tile.id}
-                  onClick={() => setDetailTile(tile)}
-                  className={`relative rounded-xl tile-metal-frame bg-surface/80 overflow-hidden flex flex-col transition-all duration-200 cursor-pointer hover:brightness-110 ${glow}`}
+                  key={`empty-${pos}`}
+                  className="rounded-xl border border-purple-900/20 bg-surface/20"
                   style={{ aspectRatio: "1/1" }}
-                >
-                  {tile.imageUrl && (
-                    <>
-                      <Image src={tile.imageUrl} alt={tile.title} fill sizes="200px" className="object-cover opacity-70" />
-                      <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/10 to-black/60" />
-                    </>
-                  )}
-                  <div className="relative z-10 flex flex-col h-full p-2">
-                    <div className="flex items-start justify-between gap-1 flex-1">
-                      <p className="text-xs font-semibold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] leading-tight line-clamp-3">
-                        {tile.title}
-                      </p>
-                      <div className="shrink-0 mt-0.5">
-                        <CompletionBadge tile={tile} teams={teams} />
-                      </div>
-                    </div>
-                    <div className="flex items-end justify-between gap-1 mt-1">
-                      <TeamDots tile={tile} teams={teams} />
-                      <span className="text-[10px] text-purple-300/70 tabular-nums shrink-0">
-                        {+tile.points.toFixed(1)}pt
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              );
-            });
-
-            if (!hasLineBonuses) return tileCells;
-
-            return [
-              ...tileCells,
-              <LineIndicator
-                key={`row-ind-${rowIdx}`}
-                summary={rowSummaries[rowIdx]}
-                teams={teams}
-                bonusConfig={bonusConfig}
-                direction="row"
-              />,
-            ];
-          })}
-
-          {/* Column indicators */}
-          {hasLineBonuses && (
-            <>
-              {indices.map((colIdx) => (
-                <LineIndicator
-                  key={`col-ind-${colIdx}`}
-                  summary={colSummaries[colIdx]}
-                  teams={teams}
-                  bonusConfig={bonusConfig}
-                  direction="col"
                 />
-              ))}
-              <div key="corner" />
-            </>
-          )}
-        </div>
-      )}
-
-      {/* List view */}
-      {view === "list" && (
-        <div className="flex flex-col gap-1.5">
-          {tiles.map((tile) => {
+              );
+            }
             const glow = tileGlowClass(tile);
             return (
               <div
                 key={tile.id}
                 onClick={() => setDetailTile(tile)}
-                className={`flex items-center gap-3 rounded-xl border border-purple-900/40 hover:border-purple-700/50 bg-surface/80 px-4 py-3 transition-all cursor-pointer ${glow}`}
+                className={`relative rounded-xl tile-metal-frame bg-surface/80 overflow-hidden flex flex-col transition-all duration-200 cursor-pointer hover:brightness-110 ${glow}`}
+                style={{ aspectRatio: "1/1" }}
               >
                 {tile.imageUrl && (
-                  <div className="relative w-10 h-10 rounded-lg overflow-hidden shrink-0">
-                    <Image src={tile.imageUrl} alt={tile.title} fill sizes="40px" className="object-cover" />
-                  </div>
+                  <>
+                    <Image src={tile.imageUrl} alt={tile.title} fill sizes="200px" className="object-cover opacity-70" />
+                    <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/10 to-black/60" />
+                  </>
                 )}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-purple-100 truncate">{tile.title}</p>
-                  {tile.description && (
-                    <p className="text-xs text-purple-500/70 truncate mt-0.5">{tile.description}</p>
-                  )}
-                </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <TeamDots tile={tile} teams={teams} />
-                  <CompletionBadge tile={tile} teams={teams} />
-                  <span className="text-xs text-purple-500/60 tabular-nums w-10 text-right">
-                    {+tile.points.toFixed(1)} pts
-                  </span>
+                <div className="relative z-10 flex flex-col h-full p-2">
+                  <div className="flex items-start justify-between gap-1 flex-1">
+                    <p className="text-xs font-semibold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] leading-tight line-clamp-3">
+                      {tile.title}
+                    </p>
+                    <div className="shrink-0 mt-0.5">
+                      <CompletionBadge tile={tile} teams={teams} />
+                    </div>
+                  </div>
+                  <div className="flex items-end justify-between gap-1 mt-1">
+                    <TeamDots tile={tile} teams={teams} />
+                    {!(tile.scoringMode === "POINTS" && tile.pointsTarget == null) && (
+                      <span className="text-[10px] text-purple-300/70 tabular-nums shrink-0">
+                        {+tile.points.toFixed(1)}pt
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             );
-          })}
-        </div>
-      )}
+          });
+
+          if (!hasLineBonuses) return tileCells;
+
+          return [
+            ...tileCells,
+            <LineIndicator
+              key={`row-ind-${rowIdx}`}
+              summary={rowSummaries[rowIdx]}
+              teams={teams}
+              bonusConfig={bonusConfig}
+              direction="row"
+            />,
+          ];
+        })}
+
+        {/* Column indicators */}
+        {hasLineBonuses && (
+          <>
+            {indices.map((colIdx) => (
+              <LineIndicator
+                key={`col-ind-${colIdx}`}
+                summary={colSummaries[colIdx]}
+                teams={teams}
+                bonusConfig={bonusConfig}
+                direction="col"
+              />
+            ))}
+            <div key="corner" />
+          </>
+        )}
+      </div>
 
       {/* Legend */}
       {teams.length > 0 && (
