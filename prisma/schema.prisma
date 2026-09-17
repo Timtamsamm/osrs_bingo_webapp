@@ -157,6 +157,25 @@ model Submission {
   tile BingoTile @relation(fields: [tileId], references: [id], onDelete: Cascade)
 }
 
+// ── Boss item database (reference data for the admin tile editor's item picker) ─
+
+model Boss {
+  id    String     @id @default(cuid())
+  name  String     @unique
+  items BossItem[]
+}
+
+model BossItem {
+  id      String @id @default(cuid())
+  bossId  String
+  boss    Boss   @relation(fields: [bossId], references: [id], onDelete: Cascade)
+  itemId  Int    // OSRS item ID
+  name    String
+  sortOrder Int  @default(0)
+
+  @@unique([bossId, itemId])
+}
+
 // ── Events ─────────────────────────────────────────────────────────────────
 
 model Settings {

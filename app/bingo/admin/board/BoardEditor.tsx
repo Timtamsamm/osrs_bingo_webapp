@@ -4,6 +4,8 @@ import { useState, useCallback, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import ImageCropper from "@/app/components/ImageCropper";
+import BossItemPickerButton from "./BossItemPicker";
+import { parseItemLines as parseDinkItems, itemLinesToText as dinkItemsToText } from "@/lib/itemListFormat";
 import { DndContext, DragOverlay, useDraggable, useDroppable, PointerSensor, useSensor, useSensors, type DragStartEvent, type DragEndEvent } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 
@@ -53,25 +55,6 @@ interface Board {
 const BOARD_SIZES = [3, 4, 5] as const;
 const MAX_SIZE = 5;
 const GRID_COLS_CLASS: Record<number, string> = { 3: "grid-cols-3", 4: "grid-cols-4", 5: "grid-cols-5" };
-
-function parseDinkItems(text: string): Array<{ id: number; name: string }> {
-  return text
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .flatMap((line) => {
-      const spaceIdx = line.indexOf(" ");
-      if (spaceIdx === -1) return [];
-      const id = parseInt(line.slice(0, spaceIdx), 10);
-      const name = line.slice(spaceIdx + 1).trim();
-      if (isNaN(id) || !name) return [];
-      return [{ id, name }];
-    });
-}
-
-function dinkItemsToText(items: Array<{ id: number; name: string }> | null): string {
-  return (items ?? []).map((i) => `${i.id} ${i.name}`).join("\n");
-}
 
 function parsePointsItems(text: string): PointsItemDef[] {
   return text
@@ -702,7 +685,18 @@ export default function BoardEditor({ board }: Props) {
                     </p>
                   </div>
                   <div className="flex flex-col gap-1">
-                    <label className={labelCls}>Items (id, base points, name)</label>
+                    <div className="flex items-center justify-between gap-2">
+                      <label className={labelCls}>Items (id, base points, name)</label>
+                      <BossItemPickerButton
+                        onAdd={(items) => {
+                          const existingIds = new Set(parsePointsItems(selectedTile!.pointsItemsText).map((i) => i.id));
+                          const lines = items.filter((i) => !existingIds.has(i.itemId)).map((i) => `${i.itemId} 1 ${i.name}`).join("\n");
+                          if (!lines) return;
+                          const prev = selectedTile!.pointsItemsText.trim();
+                          updateTile(selected, "pointsItemsText", prev ? `${prev}\n${lines}` : lines);
+                        }}
+                      />
+                    </div>
                     <textarea
                       value={selectedTile!.pointsItemsText}
                       onChange={(e) => updateTile(selected, "pointsItemsText", e.target.value)}
@@ -712,7 +706,7 @@ export default function BoardEditor({ board }: Props) {
                     />
                   </div>
                   <p className="text-[10px] text-purple-700/60">
-                    One item per line as <span className="font-mono text-purple-600">itemId basePoints item name</span>. Each duplicate drop of the same item is worth half the last, twice, then stays flat at 25% of its base value — so mixing items completes the tile fastest.
+                    One item per line as <span className="font-mono text-purple-600">itemId basePoints item name</span>. Each duplicate drop of the same item is worth half the last, twice, then stays flat at 25% of its base value — so mixing items completes the tile fastest. Items added from the boss picker get a placeholder of 1 point — edit each value before saving.
                   </p>
                 </div>
               ) : (
@@ -775,7 +769,18 @@ export default function BoardEditor({ board }: Props) {
                           />
                         </div>
                         <div className="flex flex-col gap-1 flex-1">
-                          <label className={labelCls}>Dink item IDs</label>
+                          <div className="flex items-center justify-between gap-2">
+                            <label className={labelCls}>Dink item IDs</label>
+                            <BossItemPickerButton
+                              onAdd={(items) => {
+                                const existingIds = new Set(parseDinkItems(ts.dinkItemsText).map((i) => i.id));
+                                const lines = items.filter((i) => !existingIds.has(i.itemId)).map((i) => `${i.itemId} ${i.name}`).join("\n");
+                                if (!lines) return;
+                                const prev = ts.dinkItemsText.trim();
+                                updateTier(selected, tierKey, "dinkItemsText", prev ? `${prev}\n${lines}` : lines);
+                              }}
+                            />
+                          </div>
                           <textarea
                             value={ts.dinkItemsText}
                             onChange={(e) => updateTier(selected, tierKey, "dinkItemsText", e.target.value)}
