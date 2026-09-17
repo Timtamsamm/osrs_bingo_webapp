@@ -52,11 +52,13 @@ export async function GET(req: NextRequest) {
     discordWebhook: webhookUrl.toString(),
     lootEnabled: true,
     collectionLogEnabled: true,
+    petEnabled: true,
     minLootValue: 2147483647,
     lootItemAllowlist: Array.from(itemNames).join("\n"),
     // A screenshot is required for a submission to auto-approve (see the
     // webhook route) — force these on so the dynamic config alone is enough.
     lootSendImage: true,
     collectionSendImage: true,
+    petSendImage: true,
   });
 }

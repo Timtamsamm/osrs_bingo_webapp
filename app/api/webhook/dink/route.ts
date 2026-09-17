@@ -111,6 +111,40 @@ export async function POST(req: NextRequest) {
     if (itemId != null && itemName) {
       droppedItems.push({ id: itemId, name: itemName });
     }
+  } else if (type === "PET") {
+    // Dink's Pet notifier has no item ID in its payload at all (just a
+    // `petName` string) — pets aren't picked up like normal loot, so there's
+    // no inventory item event to read an ID off. Resolve the ID by matching
+    // the pet's name against whatever's actually configured on the board,
+    // the same source of truth LOOT/COLLECTION items are matched against.
+    const petName = extra.petName as string | undefined;
+    if (petName) {
+      const normalizedPetName = petName.trim().toLowerCase();
+      let resolvedId: number | undefined;
+      outer: for (const tile of board.tiles) {
+        if (tile.scoringMode === "POINTS") {
+          const cfg = tile.pointsConfig as PointsConfig | null;
+          for (const item of cfg?.items ?? []) {
+            if (item.name.trim().toLowerCase() === normalizedPetName) {
+              resolvedId = item.id;
+              break outer;
+            }
+          }
+        } else {
+          for (const tierDef of (tile.tiers as TierDef[]) ?? []) {
+            for (const entry of tierDef.dinkItems) {
+              if (entry.name.trim().toLowerCase() === normalizedPetName) {
+                resolvedId = entry.id;
+                break outer;
+              }
+            }
+          }
+        }
+      }
+      if (resolvedId != null) {
+        droppedItems.push({ id: resolvedId, name: petName });
+      }
+    }
   } else {
     return NextResponse.json({ status: "ignored" });
   }
