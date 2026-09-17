@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Image from "next/image";
+import Link from "next/link";
 
 export type TeamStatus = {
   teamId: string;
@@ -313,7 +314,14 @@ function TileDetailModal({ tile, teams, scaleByTeamSize, onClose }: { tile: Tile
 
         <div className="p-5 flex flex-col gap-4">
           <div className="flex items-start justify-between gap-3">
-            <h3 className="font-[family-name:var(--font-cinzel)] text-xl font-bold text-white heading-glow">{tile.title}</h3>
+            <div>
+              <h3 className="font-[family-name:var(--font-cinzel)] text-xl font-bold text-white heading-glow">{tile.title}</h3>
+              {tile.title.trim() && (
+                <Link href={`/bingo/rules#tile-${tile.id}`} className="text-xs text-purple-500 hover:text-purple-300 transition-colors">
+                  View in Rules →
+                </Link>
+              )}
+            </div>
             <button
               type="button"
               onClick={onClose}

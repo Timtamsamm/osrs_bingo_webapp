@@ -23,6 +23,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <NavLink href="/bingo/admin/submissions">Submissions</NavLink>
           <NavLink href="/bingo/admin/teams">Teams</NavLink>
           <NavLink href="/bingo/admin/bosses">Boss Items</NavLink>
+          <NavLink href="/bingo/admin/rules">Rules</NavLink>
         </nav>
         <div className="flex flex-row md:flex-col gap-1 p-2 md:p-3 border-t border-purple-900/30 overflow-x-auto md:overflow-visible">
           <Link

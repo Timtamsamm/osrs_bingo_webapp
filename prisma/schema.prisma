@@ -181,6 +181,7 @@ model BossItem {
 model Settings {
   id                String  @id
   discordWebhookUrl String? // posts an announcement embed here when an event is created
+  generalRules      String? @db.Text // shown on the Rules page, above the per-tile board rules
 }
 
 model Event {
