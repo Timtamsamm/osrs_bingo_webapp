@@ -48,8 +48,10 @@ export async function GET(req: NextRequest) {
   const webhookUrl = new URL("/api/webhook/dink", req.url);
   webhookUrl.searchParams.set("token", board.dinkToken);
 
+  const url = webhookUrl.toString();
+
   return NextResponse.json({
-    discordWebhook: webhookUrl.toString(),
+    discordWebhook: url,
     lootEnabled: true,
     collectionLogEnabled: true,
     petEnabled: true,
@@ -60,5 +62,18 @@ export async function GET(req: NextRequest) {
     lootSendImage: true,
     collectionSendImage: true,
     petSendImage: true,
+    // Dink lets a player set a per-notifier "Webhook Override" (Loot/
+    // Collection/Pet) that, if non-blank, REPLACES the primary webhook for
+    // that notification type only — so a player who's pointed one of these
+    // at their own Discord channel silently stops reaching us for that
+    // notifier, even though discordWebhook above is set correctly. Confirmed
+    // in production: a Collection Log pet notification reached the player's
+    // own channel but never hit this endpoint. These three keys are
+    // Dink-side "merge" (append-as-new-line) config keys on import, not
+    // replace — so setting our own URL here adds us alongside whatever
+    // override the player already has, rather than clobbering it.
+    lootWebhook: url,
+    collectionWebhook: url,
+    petWebhook: url,
   });
 }
