@@ -122,7 +122,8 @@ model BingoTile {
   boardId      String
   position     Int      // 0–24 for a 5×5 grid
   title        String
-  description  String?
+  description  String?  // shown as "Tile Objective" in the public tile-detail popup
+  rules        String?  @db.Text // shown on the public Rules page's Board Rules section — separate from description on purpose
   imageUrl     String?  // reference/example image
   scoringMode  String   @default("TIERED")  // "TIERED" | "POINTS"
   tiers        Json     @default("[]")  // TierDef[] — used when scoringMode = TIERED — [{tier:1|2|3, points, requiredCount, dinkItems:[{id,name}]}]

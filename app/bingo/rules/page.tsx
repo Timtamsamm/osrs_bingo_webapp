@@ -13,7 +13,7 @@ export default async function RulesPage() {
         size: true,
         tiles: {
           orderBy: { position: "asc" },
-          select: { id: true, position: true, title: true, description: true },
+          select: { id: true, position: true, title: true, rules: true },
         },
       },
     }),
@@ -73,8 +73,8 @@ export default async function RulesPage() {
                   className="bg-[#0e0820] border border-purple-900/40 rounded-2xl p-5 scroll-mt-24 target:border-purple-500 target:ring-2 target:ring-purple-500/40 transition-colors"
                 >
                   <h3 className="font-semibold text-purple-100 text-base mb-1.5">{tile.title}</h3>
-                  {tile.description?.trim() ? (
-                    <p className="text-sm text-purple-300/80 whitespace-pre-line leading-relaxed">{tile.description}</p>
+                  {tile.rules?.trim() ? (
+                    <p className="text-sm text-purple-300/80 whitespace-pre-line leading-relaxed">{tile.rules}</p>
                   ) : (
                     <p className="text-sm text-purple-600/60 italic">No specific rules for this tile.</p>
                   )}

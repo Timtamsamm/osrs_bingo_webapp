@@ -33,6 +33,7 @@ interface Tile {
   position: number;
   title: string;
   description: string | null;
+  rules: string | null;
   imageUrl: string | null;
   scoringMode: string;
   tiers: TierDef[] | null;
@@ -92,6 +93,7 @@ interface TierState {
 interface TileState {
   title: string;
   description: string;
+  rules: string;
   imageUrl: string | null;
   scoringMode: "TIERED" | "POINTS";
   t1: TierState;
@@ -106,7 +108,7 @@ const EMPTY_TIER: TierState = { points: 1, requiredCount: 1, description: "", di
 function makeTileState(t: Tile | undefined): TileState {
   if (!t) {
     return {
-      title: "", description: "", imageUrl: null, scoringMode: "TIERED",
+      title: "", description: "", rules: "", imageUrl: null, scoringMode: "TIERED",
       t1: { ...EMPTY_TIER }, t2: { ...EMPTY_TIER }, t3: { ...EMPTY_TIER },
       pointsTargetText: "100", pointsItemsText: "",
     };
@@ -119,6 +121,7 @@ function makeTileState(t: Tile | undefined): TileState {
   return {
     title: t.title,
     description: t.description ?? "",
+    rules: t.rules ?? "",
     imageUrl: t.imageUrl ?? null,
     scoringMode: t.scoringMode === "POINTS" ? "POINTS" : "TIERED",
     t1: getTier(1), t2: getTier(2), t3: getTier(3),
@@ -323,7 +326,7 @@ export default function BoardEditor({ board }: Props) {
     });
   }
 
-  function updateTile(pos: number, field: "title" | "description" | "pointsItemsText", value: string) {
+  function updateTile(pos: number, field: "title" | "description" | "rules" | "pointsItemsText", value: string) {
     setTiles((prev) => ({ ...prev, [pos]: { ...prev[pos], [field]: value } }));
   }
 
@@ -381,6 +384,7 @@ export default function BoardEditor({ board }: Props) {
             {
               title: t.title,
               description: t.description,
+              rules: t.rules,
               imageUrl: t.imageUrl,
               scoringMode: t.scoringMode,
               tiers: t.scoringMode === "TIERED" ? stateToTiers(t) : [],
@@ -622,6 +626,13 @@ export default function BoardEditor({ board }: Props) {
               <div className="flex flex-col gap-1">
                 <label className={labelCls}>Description (optional)</label>
                 <textarea value={selectedTile!.description} onChange={(e) => updateTile(selected, "description", e.target.value)} rows={2} placeholder="Any extra instructions" className={`${inputCls} resize-y`} />
+                <p className="text-[10px] text-purple-700/60">Shown as &quot;Tile Objective&quot; in the tile&apos;s popup on the public board.</p>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className={labelCls}>Rules (optional)</label>
+                <textarea value={selectedTile!.rules} onChange={(e) => updateTile(selected, "rules", e.target.value)} rows={3} placeholder="Formal rules/clarifications for this tile" className={`${inputCls} resize-y`} />
+                <p className="text-[10px] text-purple-700/60">Shown on the public Rules page&apos;s Board Rules section — separate from the description above.</p>
               </div>
 
               {/* Scoring mode toggle */}

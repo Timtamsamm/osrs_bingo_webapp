@@ -9,6 +9,7 @@ type PointsConfig = { target?: number; items: Array<{ id: number; name: string; 
 type TileInput = {
   title: string;
   description: string;
+  rules?: string;
   imageUrl?: string;
   scoringMode?: "TIERED" | "POINTS";
   tiers: TierDef[];
@@ -47,6 +48,7 @@ export async function POST(req: NextRequest) {
             position: Number(pos),
             title: t.title.trim(),
             description: t.description?.trim() || null,
+            rules: t.rules?.trim() || null,
             imageUrl: t.imageUrl || null,
             scoringMode: t.scoringMode ?? "TIERED",
             tiers: t.tiers ?? [],
@@ -88,6 +90,7 @@ export async function PUT(req: NextRequest) {
     const data = {
       title: t.title.trim(),
       description: t.description?.trim() || null,
+      rules: t.rules?.trim() || null,
       imageUrl: t.imageUrl || null,
       scoringMode: t.scoringMode ?? "TIERED",
       tiers: t.tiers ?? [],
