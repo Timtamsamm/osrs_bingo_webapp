@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import Link from "next/link";
 import ImageCropper from "@/app/components/ImageCropper";
 import BossItemPickerButton from "./BossItemPicker";
 import { parseItemLines as parseDinkItems, itemLinesToText as dinkItemsToText } from "@/lib/itemListFormat";
@@ -326,7 +327,7 @@ export default function BoardEditor({ board }: Props) {
     });
   }
 
-  function updateTile(pos: number, field: "title" | "description" | "rules" | "pointsItemsText", value: string) {
+  function updateTile(pos: number, field: "title" | "description" | "pointsItemsText", value: string) {
     setTiles((prev) => ({ ...prev, [pos]: { ...prev[pos], [field]: value } }));
   }
 
@@ -626,13 +627,14 @@ export default function BoardEditor({ board }: Props) {
               <div className="flex flex-col gap-1">
                 <label className={labelCls}>Description (optional)</label>
                 <textarea value={selectedTile!.description} onChange={(e) => updateTile(selected, "description", e.target.value)} rows={2} placeholder="Any extra instructions" className={`${inputCls} resize-y`} />
-                <p className="text-[10px] text-purple-700/60">Shown as &quot;Tile Objective&quot; in the tile&apos;s popup on the public board.</p>
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label className={labelCls}>Rules (optional)</label>
-                <textarea value={selectedTile!.rules} onChange={(e) => updateTile(selected, "rules", e.target.value)} rows={3} placeholder="Formal rules/clarifications for this tile" className={`${inputCls} resize-y`} />
-                <p className="text-[10px] text-purple-700/60">Shown on the public Rules page&apos;s Board Rules section — separate from the description above.</p>
+                <p className="text-[10px] text-purple-700/60">
+                  Shown as &quot;Tile Objective&quot; in the tile&apos;s popup on the public board. This tile&apos;s formal Rules
+                  text is edited on the{" "}
+                  <Link href="/bingo/admin/rules" className="text-purple-400 hover:text-purple-200 underline">
+                    Rules
+                  </Link>{" "}
+                  page.
+                </p>
               </div>
 
               {/* Scoring mode toggle */}
