@@ -55,14 +55,6 @@ export async function GET(req: NextRequest) {
     lootEnabled: true,
     collectionLogEnabled: true,
     petEnabled: true,
-    // minLootValue is a single global threshold shared across every
-    // destination configured for the Loot notifier (not scoped to our
-    // webhook), so importing it clobbers the player's own threshold and
-    // silences their other webhooks for anything below it. lootItemAllowlist
-    // below already guarantees board items notify regardless of value — this
-    // is only here as a fallback safety net, kept low enough that it
-    // shouldn't meaningfully raise most players' existing thresholds.
-    minLootValue: 3_000_000,
     lootItemAllowlist: Array.from(itemNames).join("\n"),
     // A screenshot is required for a submission to auto-approve (see the
     // webhook route) — force these on so the dynamic config alone is enough.
