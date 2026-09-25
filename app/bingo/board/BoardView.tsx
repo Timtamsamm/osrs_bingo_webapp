@@ -293,26 +293,83 @@ function TileDetailModal({ tile, teams, scaleByTeamSize, onClose }: { tile: Tile
 
   const sortedTiers = [...tile.tiers].sort((a, b) => a.tier - b.tier);
 
+  const teamProgress = teams.length > 0 && (
+    <div className="flex flex-col gap-2">
+      <p className="text-xs tracking-[0.2em] text-purple-500 uppercase font-semibold">Team progress</p>
+      <div className="flex flex-col gap-1.5">
+        {teams.map((team) => {
+          const status = tile.teamStatuses.find((s) => s.teamId === team.id);
+          if (tile.scoringMode === "POINTS") {
+            const earned = status?.pointsEarned ?? 0;
+            const target = tile.pointsTarget;
+
+            if (target != null) {
+              const pct = target > 0 ? Math.min((earned / target) * 100, 100) : 0;
+              return (
+                <div key={team.id} className="flex items-center gap-2 text-sm">
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ background: team.color, boxShadow: `0 0 4px ${team.color}` }} />
+                  <span className="text-purple-200 flex-1 truncate">{team.name}</span>
+                  <div className="w-16 h-1.5 bg-white/10 rounded-full overflow-hidden shrink-0">
+                    <div className="h-full rounded-full" style={{ width: `${pct}%`, background: team.color }} />
+                  </div>
+                  <span className="text-xs text-purple-500 shrink-0 tabular-nums w-20 inline-block text-right whitespace-nowrap">{+earned.toFixed(1)}/{+target.toFixed(1)}</span>
+                </div>
+              );
+            }
+
+            // No target — completion means one of every item, points are uncapped.
+            const receivedCount = tile.pointsItems.filter((i) => status?.receivedItemIds?.includes(i.id)).length;
+            return (
+              <div key={team.id} className="flex items-center gap-2 text-sm">
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: team.color, boxShadow: `0 0 4px ${team.color}` }} />
+                <span className="text-purple-200 flex-1 truncate">{team.name}</span>
+                <span className="text-xs text-purple-500 shrink-0 tabular-nums">{receivedCount}/{tile.pointsItems.length} items · {+earned.toFixed(1)}pts</span>
+              </div>
+            );
+          }
+          const achieved = status?.achievedTiers ?? [];
+          const label = achieved.length > 0 ? `T${[...achieved].sort().join(", T")}` : "Not started";
+          return (
+            <div key={team.id} className="flex items-center gap-2 text-sm">
+              <span className="w-2 h-2 rounded-full shrink-0" style={{ background: team.color, boxShadow: `0 0 4px ${team.color}` }} />
+              <span className="text-purple-200 flex-1 truncate">{team.name}</span>
+              <span className="text-xs text-purple-500 shrink-0">{label}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+
   return (
     <div
       className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
       onClick={onClose}
     >
       <div
-        className="bg-[#0e0820] border border-purple-900/50 rounded-2xl max-w-md w-full max-h-[85vh] overflow-y-auto purple-glow-sm"
+        className="bg-[#0e0820] border border-purple-900/50 rounded-2xl max-w-md sm:max-w-2xl w-full max-h-[85vh] overflow-y-auto sm:overflow-hidden sm:flex purple-glow-sm"
         onClick={(e) => e.stopPropagation()}
       >
         {tile.imageUrl && (
-          // Tile images are always cropped to 1:1 on upload (see ImageCropper's
-          // default aspect), so a square frame here shows the whole image with
-          // no cropping or letterboxing.
-          <div className="relative w-full aspect-square overflow-hidden">
-            <Image src={tile.imageUrl} alt={tile.title} fill sizes="400px" className="object-cover" />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#0e0820] via-transparent to-transparent" />
+          // Square on every breakpoint — tile images are always cropped to
+          // 1:1 on upload, so keeping the frame square means object-fit:cover
+          // never has to crop the subject to fit a mismatched box. Full width
+          // on mobile (image on top); a fixed-width column on the left from
+          // sm up (image next to content instead of above it). From sm up,
+          // Team progress also moves into this column below the image
+          // (it's otherwise duplicated further down, hidden at sm+) so the
+          // leftover space under the now-smaller square image gets used
+          // instead of sitting empty.
+          <div className="sm:w-64 sm:shrink-0 sm:self-start sm:flex sm:flex-col sm:gap-3 sm:p-3">
+            <div className="relative w-[calc(100%-1.5rem)] aspect-square m-3 sm:w-full sm:m-0 overflow-hidden rounded-xl tile-metal-frame">
+              <Image src={tile.imageUrl} alt={tile.title} fill sizes="(min-width: 640px) 256px, 400px" style={{ objectFit: "cover" }} />
+              <div className="absolute inset-0 bg-gradient-to-t sm:bg-gradient-to-r from-[#0e0820] via-transparent to-transparent" />
+            </div>
+            <div className="hidden sm:block">{teamProgress}</div>
           </div>
         )}
 
-        <div className="p-5 flex flex-col gap-4">
+        <div className="p-5 flex flex-col gap-4 sm:flex-1 sm:min-w-0 sm:max-h-[85vh] sm:overflow-y-auto">
           <div className="flex items-start justify-between gap-3">
             <div>
               <h3 className="font-[family-name:var(--font-cinzel)] text-xl font-bold text-white heading-glow">{tile.title}</h3>
@@ -404,53 +461,10 @@ function TileDetailModal({ tile, teams, scaleByTeamSize, onClose }: { tile: Tile
             </div>
           )}
 
-          {teams.length > 0 && (
-            <div className="flex flex-col gap-2">
-              <p className="text-xs tracking-[0.2em] text-purple-500 uppercase font-semibold">Team progress</p>
-              <div className="flex flex-col gap-1.5">
-                {teams.map((team) => {
-                  const status = tile.teamStatuses.find((s) => s.teamId === team.id);
-                  if (tile.scoringMode === "POINTS") {
-                    const earned = status?.pointsEarned ?? 0;
-                    const target = tile.pointsTarget;
-
-                    if (target != null) {
-                      const pct = target > 0 ? Math.min((earned / target) * 100, 100) : 0;
-                      return (
-                        <div key={team.id} className="flex items-center gap-2 text-sm">
-                          <span className="w-2 h-2 rounded-full shrink-0" style={{ background: team.color, boxShadow: `0 0 4px ${team.color}` }} />
-                          <span className="text-purple-200 flex-1 truncate">{team.name}</span>
-                          <div className="w-16 h-1.5 bg-white/10 rounded-full overflow-hidden shrink-0">
-                            <div className="h-full rounded-full" style={{ width: `${pct}%`, background: team.color }} />
-                          </div>
-                          <span className="text-xs text-purple-500 shrink-0 tabular-nums w-20 inline-block text-right whitespace-nowrap">{+earned.toFixed(1)}/{+target.toFixed(1)}</span>
-                        </div>
-                      );
-                    }
-
-                    // No target — completion means one of every item, points are uncapped.
-                    const receivedCount = tile.pointsItems.filter((i) => status?.receivedItemIds?.includes(i.id)).length;
-                    return (
-                      <div key={team.id} className="flex items-center gap-2 text-sm">
-                        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: team.color, boxShadow: `0 0 4px ${team.color}` }} />
-                        <span className="text-purple-200 flex-1 truncate">{team.name}</span>
-                        <span className="text-xs text-purple-500 shrink-0 tabular-nums">{receivedCount}/{tile.pointsItems.length} items · {+earned.toFixed(1)}pts</span>
-                      </div>
-                    );
-                  }
-                  const achieved = status?.achievedTiers ?? [];
-                  const label = achieved.length > 0 ? `T${[...achieved].sort().join(", T")}` : "Not started";
-                  return (
-                    <div key={team.id} className="flex items-center gap-2 text-sm">
-                      <span className="w-2 h-2 rounded-full shrink-0" style={{ background: team.color, boxShadow: `0 0 4px ${team.color}` }} />
-                      <span className="text-purple-200 flex-1 truncate">{team.name}</span>
-                      <span className="text-xs text-purple-500 shrink-0">{label}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+          {/* Duplicated above (hidden here, shown there) at sm+, where it
+              moves into the image column instead — see the comment by the
+              image. */}
+          <div className="sm:hidden">{teamProgress}</div>
         </div>
       </div>
     </div>
@@ -496,7 +510,7 @@ export default function BoardView({ tiles, teams, rowSummaries, colSummaries, bo
               >
                 {tile.imageUrl && (
                   <>
-                    <Image src={tile.imageUrl} alt={tile.title} fill sizes="200px" className="object-cover opacity-70" />
+                    <Image src={tile.imageUrl} alt={tile.title} fill sizes="200px" className="opacity-70" style={{ objectFit: "cover" }} />
                     <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/10 to-black/60" />
                   </>
                 )}
