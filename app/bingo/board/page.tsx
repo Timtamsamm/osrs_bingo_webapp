@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import BoardTabNav from "@/app/components/BoardTabNav";
 import Countdown from "@/app/components/Countdown";
+import PageHeaderNav from "@/app/components/PageHeaderNav";
 import BoardView from "./BoardView";
 import type { TileSummary, LineSummary, BonusConfig } from "./BoardView";
 import { computeStandings, getLineBonusTier, getRows, getCols, pointsNominalMax, pointsTileProgress, scaledRequirement, scaleFactorFor, normalizedTeamSize, type TierDef, type PointsConfig } from "@/lib/scoring";
@@ -157,40 +158,25 @@ export default async function BoardPage() {
       <div className="max-w-5xl mx-auto px-4 py-8">
 
         {/* Header */}
-        <div className="text-center mb-8 relative">
-          <div className="absolute left-0 top-0">
-            <Link
-              href="/"
-              className="inline-flex items-center gap-1.5 rounded-full border border-purple-800/50 bg-surface/60 px-3.5 py-2 text-sm text-purple-300 hover:text-white hover:border-purple-600/60 hover:bg-raised/60 transition-colors font-medium"
-            >
-              ← Home
-            </Link>
-          </div>
-          <div className="absolute right-0 top-0">
-            <Link
-              href="/bingo/admin"
-              className="inline-flex items-center gap-1.5 rounded-full border border-purple-800/50 bg-surface/60 px-3.5 py-2 text-sm text-purple-300 hover:text-white hover:border-purple-600/60 hover:bg-raised/60 transition-colors font-medium"
-            >
-              Admin →
-            </Link>
-          </div>
-
-          <h1 className="font-[family-name:var(--font-cinzel)] text-4xl md:text-5xl font-black text-white heading-glow pt-1">
-            {board?.name ?? "Bingo Board"}
-          </h1>
-          <p className="text-xs tracking-[0.3em] text-purple-500 uppercase mt-3">
-            {board?.description ?? "Bingo Event"}
-          </p>
-          {board?.endsAt && (
-            <div className="mt-4">
-              <Countdown endsAt={board.endsAt.toISOString()} label="Ends in" />
-            </div>
-          )}
-          {scaleByTeamSize && (
-            <p className="text-[11px] text-purple-600/70 mt-2">
-              Team-size scaling is on — smaller teams need proportionally fewer drops/points to complete a tile.
+        <div className="text-center mb-8">
+          <PageHeaderNav>
+            <h1 className="font-[family-name:var(--font-cinzel)] text-4xl md:text-5xl font-black text-white heading-glow pt-1">
+              {board?.name ?? "Bingo Board"}
+            </h1>
+            <p className="text-xs tracking-[0.3em] text-purple-500 uppercase mt-3">
+              {board?.description ?? "Bingo Event"}
             </p>
-          )}
+            {board?.endsAt && (
+              <div className="mt-4">
+                <Countdown endsAt={board.endsAt.toISOString()} label="Ends in" />
+              </div>
+            )}
+            {scaleByTeamSize && (
+              <p className="text-[11px] text-purple-600/70 mt-2">
+                Team-size scaling is on — smaller teams need proportionally fewer drops/points to complete a tile.
+              </p>
+            )}
+          </PageHeaderNav>
         </div>
 
         {/* Team standings */}
