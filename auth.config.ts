@@ -13,7 +13,7 @@ export const authConfig: NextAuthConfig = {
       if (pathname.startsWith("/api/auth") || pathname === "/login" || pathname.startsWith("/api/webhook")) return true
       // Admin routes (pages + API) require an authenticated admin.
       // Each section owns its own /<section>/admin path — add new prefixes here as sections gain admin panels.
-      const adminPagePrefixes = ["/bingo/admin", "/events/admin"]
+      const adminPagePrefixes = ["/bingo/admin"]
       if (adminPagePrefixes.some((p) => pathname.startsWith(p)) || pathname.startsWith("/api/admin")) {
         return isLoggedIn && (auth?.user as { role?: string })?.role === "ADMIN"
       }
