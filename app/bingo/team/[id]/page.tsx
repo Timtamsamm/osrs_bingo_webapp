@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { fetchTeamStats, ensureTempleSnapshotTaken, type TempleSnapshotEntry, type TempleStats } from "@/lib/templeosrs";
@@ -8,7 +9,7 @@ import TeamProgressChart from "./TeamProgressChart";
 import TeamBoardGrid from "./TeamBoardGrid";
 import BoardTabNav from "@/app/components/BoardTabNav";
 import ZoomableThumbnail from "@/app/components/ZoomableThumbnail";
-import { computeStandings, bonusPts, getRows, getCols, pointsNominalMax, scaledRequirement, scaleFactorFor, normalizedTeamSize, type TierDef, type BonusConfig, type PointsConfig } from "@/lib/scoring";
+import { computeStandings, bonusPts, getRows, getCols, scaledRequirement, scaleFactorFor, normalizedTeamSize, type TierDef, type BonusConfig, type PointsConfig } from "@/lib/scoring";
 
 interface PointEvent {
   date: Date;
@@ -22,6 +23,9 @@ interface Props {
 
 export default async function TeamPage({ params }: Props) {
   const { id } = await params;
+
+  const session = await auth();
+  const isAdmin = session?.user?.role === "ADMIN";
 
   const [team, board, allTeams] = await Promise.all([
     prisma.team.findUnique({
@@ -90,6 +94,37 @@ export default async function TeamPage({ params }: Props) {
     ...getCols(size).map((p, i) => ({ key: `col-${i}`, label: `Column ${i + 1}`, positions: p }))];
 
   const approved = submissions.filter((s) => s.status === "APPROVED");
+  // Rejected drops are only useful for admins reviewing false positives —
+  // showing them to the public just airs rejected/false-positive claims.
+  const visibleSubmissions = isAdmin ? submissions : submissions.filter((s) => s.status !== "REJECTED");
+
+  // Individual contribution tracking — attributes each submission's points
+  // to whoever actually made it (via teamMember, the RSN Dink/manual
+  // submission set), so we can show a per-player leaderboard alongside the
+  // team-wide totals below.
+  function normalizeRsn(rsn: string): string {
+    return rsn.trim().replace(/[_ ]/g, " ").toLowerCase();
+  }
+  interface PlayerContribution {
+    rsn: string;
+    points: number;
+    tilesCompleted: number;
+    drops: number;
+  }
+  const contributionByRsn = new Map<string, PlayerContribution>();
+  for (const p of team.participants) {
+    contributionByRsn.set(normalizeRsn(p.rsn), { rsn: p.rsn, points: 0, tilesCompleted: 0, drops: 0 });
+  }
+  function creditPoints(teamMember: string | null, amount: number) {
+    if (!teamMember || amount <= 0) return;
+    const entry = contributionByRsn.get(normalizeRsn(teamMember));
+    if (entry) entry.points += amount;
+  }
+  for (const sub of approved) {
+    if (!sub.teamMember) continue;
+    const entry = contributionByRsn.get(normalizeRsn(sub.teamMember));
+    if (entry) entry.drops += 1;
+  }
 
   // Replay approved submissions chronologically to build a points-over-time timeline.
   const countByTileTier = new Map<string, number>();
@@ -141,6 +176,7 @@ export default async function TeamPage({ params }: Props) {
       const newTotal = hasTarget ? Math.min(prevTotal + sub.pointsAwarded, cfg.target!) : prevTotal + sub.pointsAwarded;
       pointsTotalByTile.set(sub.tileId, newTotal);
       const delta = newTotal - prevTotal;
+      creditPoints(sub.teamMember, delta);
 
       if (sub.dinkItemId != null) {
         const received = itemsReceivedByTile.get(sub.tileId) ?? new Set<number>();
@@ -176,7 +212,12 @@ export default async function TeamPage({ params }: Props) {
       const key = `${sub.tileId}:${sub.tier}`;
       const newCount = (countByTileTier.get(key) ?? 0) + 1;
       countByTileTier.set(key, newCount);
-      if (newCount !== scaledRequirement(tierDef.requiredCount, scaleFactor)) continue;
+      const requirement = scaledRequirement(tierDef.requiredCount, scaleFactor);
+      // Credit an even share of the tier's points to every submission that
+      // counted toward reaching it (not just whichever one tipped it over) —
+      // duplicates beyond the requirement earn nothing, same as the team.
+      if (newCount <= requirement) creditPoints(sub.teamMember, tierDef.points / requirement);
+      if (newCount !== requirement) continue;
 
       tile = tileById.get(sub.tileId);
       runningTotal += tierDef.points;
@@ -214,6 +255,34 @@ export default async function TeamPage({ params }: Props) {
 
   const completedTiles = [...achievedByTile.values()].filter((s) => s.has(1)).length;
   const totalTiles = inRangeTiles.filter((t) => t.title.trim()).length;
+
+  // Tiles completed per player: credit everyone with >=1 approved submission
+  // on a tile the team ultimately completed, not just whoever's submission
+  // happened to be the one that tipped it over the threshold — completion is
+  // a team effort, so everyone who touched a completed tile shares credit.
+  const completedTileIds = new Set(
+    [...achievedByTile.entries()].filter(([, tiers]) => tiers.has(1)).map(([tileId]) => tileId)
+  );
+  const contributorsByCompletedTile = new Map<string, Set<string>>();
+  for (const sub of approved) {
+    if (!sub.teamMember || !completedTileIds.has(sub.tileId)) continue;
+    const norm = normalizeRsn(sub.teamMember);
+    if (!contributionByRsn.has(norm)) continue;
+    const set = contributorsByCompletedTile.get(sub.tileId) ?? new Set<string>();
+    set.add(norm);
+    contributorsByCompletedTile.set(sub.tileId, set);
+  }
+  for (const contributors of contributorsByCompletedTile.values()) {
+    for (const norm of contributors) {
+      contributionByRsn.get(norm)!.tilesCompleted += 1;
+    }
+  }
+
+  // Best contribution first: points, then tiles completed, then drops.
+  const playerContributions = [...contributionByRsn.values()].sort(
+    (a, b) => b.points - a.points || b.tilesCompleted - a.tilesCompleted || b.drops - a.drops
+  );
+  const CONTRIBUTION_MEDALS = ["🥇", "🥈", "🥉"];
 
   // Rank among all teams — same shared scoring rule the board page uses, so they always agree.
   const scoringTiles = inRangeTiles.map((t) => ({
@@ -257,9 +326,19 @@ export default async function TeamPage({ params }: Props) {
               <h1 className="font-[family-name:var(--font-cinzel)] text-3xl font-black text-white heading-glow">{team.name}</h1>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <Link href="/" className="text-xs text-purple-500 hover:text-purple-300 transition-colors font-medium">← Home</Link>
-            <Link href="/bingo/teams" className="text-xs text-purple-500 hover:text-purple-300 transition-colors font-medium">Back to teams</Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-1.5 rounded-full border border-purple-800/50 bg-surface/60 px-3.5 py-2 text-sm text-purple-300 hover:text-white hover:border-purple-600/60 hover:bg-raised/60 transition-colors font-medium"
+            >
+              ← Home
+            </Link>
+            <Link
+              href="/bingo/teams"
+              className="inline-flex items-center gap-1.5 rounded-full border border-purple-800/50 bg-surface/60 px-3.5 py-2 text-sm text-purple-300 hover:text-white hover:border-purple-600/60 hover:bg-raised/60 transition-colors font-medium"
+            >
+              Back to teams
+            </Link>
           </div>
         </div>
 
@@ -323,6 +402,39 @@ export default async function TeamPage({ params }: Props) {
           )}
         </div>
 
+        {playerContributions.length > 0 && (
+          <div className="bg-[#0e0820] border border-purple-900/40 rounded-xl overflow-hidden">
+            <div className="p-5 pb-4">
+              <p className="text-xs tracking-[0.2em] text-purple-400 uppercase font-semibold">Individual contribution</p>
+              <p className="text-[11px] text-purple-700/60 mt-1">Ranked by points earned — top contributor first</p>
+            </div>
+            <div className="divide-y divide-purple-900/20">
+              {playerContributions.map((p, i) => (
+                <div key={p.rsn} className="flex items-center gap-3 px-5 py-3">
+                  <span className="text-sm w-6 text-center shrink-0 select-none">
+                    {CONTRIBUTION_MEDALS[i] ?? <span className="text-purple-700 text-xs">{i + 1}</span>}
+                  </span>
+                  <span className="text-sm font-semibold text-white flex-1 min-w-0 truncate">{p.rsn}</span>
+                  <div className="flex items-center gap-4 sm:gap-6 shrink-0 text-right">
+                    <div className="w-16 sm:w-20">
+                      <p className="text-sm font-bold text-white tabular-nums">{+p.points.toFixed(1)}</p>
+                      <p className="text-[10px] text-purple-600 uppercase tracking-wide">Points</p>
+                    </div>
+                    <div className="w-12 sm:w-16">
+                      <p className="text-sm font-bold text-white tabular-nums">{p.tilesCompleted}</p>
+                      <p className="text-[10px] text-purple-600 uppercase tracking-wide">Tiles</p>
+                    </div>
+                    <div className="w-12 sm:w-16">
+                      <p className="text-sm font-bold text-white tabular-nums">{p.drops}</p>
+                      <p className="text-[10px] text-purple-600 uppercase tracking-wide">Drops</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="bg-[#0e0820] border border-purple-900/40 rounded-xl p-5">
           <p className="text-xs tracking-[0.2em] text-purple-400 uppercase font-semibold mb-4">Board progress</p>
           <TeamBoardGrid
@@ -330,20 +442,37 @@ export default async function TeamPage({ params }: Props) {
             teamColor={team.color}
             tiles={inRangeTiles.filter((t) => t.title.trim()).map((tile) => {
               const cfg = pointsConfigByTile.get(tile.id);
+              const scoringMode = tile.scoringMode as "TIERED" | "POINTS";
+              const completed = achievedByTile.get(tile.id)?.has(1) ?? false;
+
+              if (scoringMode === "POINTS" && cfg) {
+                // Points-mode progress is continuous (diminishing-returns
+                // totals), not all-or-nothing — pass the real running total
+                // instead of collapsing it into a synthetic tier, or partial
+                // progress could never show as anything but 0 or done.
+                return {
+                  id: tile.id,
+                  position: tile.position,
+                  title: tile.title,
+                  imageUrl: tile.imageUrl,
+                  completed,
+                  scoringMode,
+                  pointsEarned: pointsTotalByTile.get(tile.id) ?? 0,
+                  pointsTarget: cfg.target ?? null,
+                  itemsReceived: itemsReceivedByTile.get(tile.id)?.size ?? 0,
+                  itemsTotal: cfg.items.length,
+                };
+              }
+
               return {
                 id: tile.id,
                 position: tile.position,
                 title: tile.title,
                 imageUrl: tile.imageUrl,
-                // Points-mode tiles have no discrete tiers — represent the
-                // whole tile as a single synthetic "tier" worth its target,
-                // achieved only once the target is fully reached, so the
-                // existing tier-based grid component can render it as-is.
-                tiers: cfg
-                  ? [{ tier: 1, points: pointsNominalMax(cfg), requiredCount: 1 }]
-                  : ((tile.tiers as TierDef[]) ?? []).map((td) => ({ tier: td.tier, points: td.points, requiredCount: td.requiredCount })),
+                completed,
+                scoringMode,
+                tiers: ((tile.tiers as TierDef[]) ?? []).map((td) => ({ tier: td.tier, points: td.points, requiredCount: td.requiredCount })),
                 achievedTiers: [...(achievedByTile.get(tile.id) ?? new Set<number>())],
-                isUncappedPoints: !!cfg && cfg.target == null,
               };
             })}
           />
@@ -351,11 +480,11 @@ export default async function TeamPage({ params }: Props) {
 
         <div className="bg-[#0e0820] border border-purple-900/40 rounded-xl p-5">
           <p className="text-xs tracking-[0.2em] text-purple-400 uppercase font-semibold mb-4">Activity</p>
-          {submissions.length === 0 ? (
+          {visibleSubmissions.length === 0 ? (
             <p className="text-sm text-purple-600/70">No submissions yet.</p>
           ) : (
             <div className="flex flex-col gap-2">
-              {[...submissions].reverse().map((s) => {
+              {[...visibleSubmissions].reverse().map((s) => {
                 const tileTitle = allTileTitleById.get(s.tileId) ?? "Tile";
                 return (
                   <div key={s.id} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-[#130a28]/60">

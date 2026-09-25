@@ -5,12 +5,21 @@ export interface TeamBoardTile {
   position: number;
   title: string;
   imageUrl: string | null;
-  tiers: { tier: number; points: number; requiredCount: number }[];
-  achievedTiers: number[];
-  // A points-mode tile with no target has no real cap — its "points" value
-  // here is just a nominal figure, so showing it as X/Y implies a ceiling
-  // that doesn't actually exist.
-  isUncappedPoints?: boolean;
+  completed: boolean;
+  scoringMode: "TIERED" | "POINTS";
+  // TIERED tiles: discrete tiers, all-or-nothing per tier.
+  tiers?: { tier: number; points: number; requiredCount: number }[];
+  achievedTiers?: number[];
+  // POINTS tiles: continuous progress (diminishing-returns totals, so a
+  // team can be partway to a tier's fixed all-or-nothing reward).
+  pointsEarned?: number;
+  // Capped tiles show earned/target. Uncapped tiles (no target) have no
+  // real ceiling — completion instead means "received every listed item" —
+  // so showing X/Y implies a cap that doesn't exist; show the checklist
+  // count instead.
+  pointsTarget?: number | null;
+  itemsReceived?: number;
+  itemsTotal?: number;
 }
 
 interface Props {
@@ -39,13 +48,16 @@ export default function TeamBoardGrid({ tiles, size, teamColor }: Props) {
             );
           }
 
-          const completed = tile.achievedTiers.includes(1);
-          const inProgress = !completed && tile.achievedTiers.length > 0;
-          const totalPoints = tile.tiers.reduce((sum, td) => sum + td.points, 0);
-          const earnedPoints = tile.tiers
-            .filter((td) => tile.achievedTiers.includes(td.tier))
-            .reduce((sum, td) => sum + td.points, 0);
-          const glow = completed ? "tile-glow-complete" : inProgress ? "tile-glow-progress" : "";
+          const isTiered = tile.scoringMode === "TIERED";
+          const achievedTiers = tile.achievedTiers ?? [];
+          const inProgress = !tile.completed && (isTiered ? achievedTiers.length > 0 : (tile.pointsEarned ?? 0) > 0);
+          const glow = tile.completed ? "tile-glow-complete" : inProgress ? "tile-glow-progress" : "";
+
+          const isUncapped = !isTiered && tile.pointsTarget == null;
+          const totalPoints = isTiered ? (tile.tiers ?? []).reduce((sum, td) => sum + td.points, 0) : tile.pointsTarget ?? 0;
+          const earnedPoints = isTiered
+            ? (tile.tiers ?? []).filter((td) => achievedTiers.includes(td.tier)).reduce((sum, td) => sum + td.points, 0)
+            : tile.pointsEarned ?? 0;
 
           return (
             <div
@@ -55,7 +67,7 @@ export default function TeamBoardGrid({ tiles, size, teamColor }: Props) {
             >
               {tile.imageUrl && (
                 <>
-                  <Image src={tile.imageUrl} alt={tile.title} fill sizes="200px" className="object-cover opacity-70" />
+                  <Image src={tile.imageUrl} alt={tile.title} fill sizes="200px" className="opacity-70" style={{ objectFit: "cover" }} />
                   <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/10 to-black/60" />
                 </>
               )}
@@ -64,7 +76,7 @@ export default function TeamBoardGrid({ tiles, size, teamColor }: Props) {
                   <p className="text-xs font-semibold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] leading-tight line-clamp-3">
                     {tile.title}
                   </p>
-                  {completed && (
+                  {tile.completed && (
                     <span
                       className="shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold mt-0.5"
                       style={{ background: teamColor, boxShadow: `0 0 5px ${teamColor}` }}
@@ -75,14 +87,18 @@ export default function TeamBoardGrid({ tiles, size, teamColor }: Props) {
                   )}
                 </div>
                 <div className="flex items-end justify-between gap-1 mt-1">
-                  {tile.achievedTiers.length > 0 ? (
+                  {isTiered && achievedTiers.length > 0 ? (
                     <span className="text-[9px] text-purple-300/80 font-semibold">
-                      {[...tile.achievedTiers].sort().map((t) => `T${t}`).join(" ")}
+                      {[...achievedTiers].sort().map((t) => `T${t}`).join(" ")}
                     </span>
                   ) : (
                     <span />
                   )}
-                  {!tile.isUncappedPoints && (
+                  {isUncapped ? (
+                    <span className="text-[10px] text-purple-300/70 tabular-nums shrink-0">
+                      {tile.itemsReceived ?? 0}/{tile.itemsTotal ?? 0} items
+                    </span>
+                  ) : (
                     <span className="text-[10px] text-purple-300/70 tabular-nums shrink-0">
                       {+earnedPoints.toFixed(1)}/{+totalPoints.toFixed(1)}pt
                     </span>
