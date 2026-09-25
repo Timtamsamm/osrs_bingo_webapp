@@ -134,6 +134,66 @@ export function pointsTileProgress(
   return { earned: total, completed, receivedItemIds };
 }
 
+export function normalizeRsn(rsn: string): string {
+  return rsn.trim().replace(/[_ ]/g, " ").toLowerCase();
+}
+
+/**
+ * Per-player point attribution within one team, for individual-contribution
+ * leaderboards. Points-mode credit is the same per-submission marginal delta
+ * `pointsTileProgress` computes for the team as a whole (capped at target),
+ * attributed to whichever submission earned it. Tiered credit splits a
+ * tier's fixed reward evenly across the earliest `requiredCount` approved
+ * submissions that filled it — later duplicates beyond the requirement earn
+ * nothing, same as the team gets nothing extra for them.
+ *
+ * `approvedSubmissions` must be one team's APPROVED submissions only, sorted
+ * ascending by createdAt (order matters for both the points-mode running
+ * total and for picking which tiered submissions counted as "the first N").
+ * Returns points keyed by normalizeRsn(teamMember) — submissions with no
+ * teamMember contribute to the team total but can't be attributed to anyone.
+ */
+export function creditIndividualPoints(
+  approvedSubmissions: Array<{ tileId: string; tier: number | null; teamMember: string | null; pointsAwarded: number | null; dinkItemId: number | null }>,
+  tierDefsByTile: Map<string, TierDef[]>,
+  pointsConfigByTile: Map<string, PointsConfig | null>,
+  scaleFactor: number = 1
+): Map<string, number> {
+  const pointsByRsn = new Map<string, number>();
+  const credit = (teamMember: string | null, amount: number) => {
+    if (!teamMember || amount <= 0) return;
+    const key = normalizeRsn(teamMember);
+    pointsByRsn.set(key, (pointsByRsn.get(key) ?? 0) + amount);
+  };
+
+  const countByTileTier = new Map<string, number>();
+  const pointsTotalByTile = new Map<string, number>();
+
+  for (const sub of approvedSubmissions) {
+    if (sub.tier === null) {
+      if (sub.pointsAwarded == null) continue;
+      const cfg = pointsConfigByTile.get(sub.tileId);
+      if (!cfg) continue;
+      const hasTarget = cfg.target != null;
+      const prevTotal = pointsTotalByTile.get(sub.tileId) ?? 0;
+      if (hasTarget && prevTotal >= cfg.target!) continue;
+      const newTotal = hasTarget ? Math.min(prevTotal + sub.pointsAwarded, cfg.target!) : prevTotal + sub.pointsAwarded;
+      pointsTotalByTile.set(sub.tileId, newTotal);
+      credit(sub.teamMember, newTotal - prevTotal);
+    } else {
+      const tierDef = (tierDefsByTile.get(sub.tileId) ?? []).find((t) => t.tier === sub.tier);
+      if (!tierDef) continue;
+      const key = `${sub.tileId}:${sub.tier}`;
+      const newCount = (countByTileTier.get(key) ?? 0) + 1;
+      countByTileTier.set(key, newCount);
+      const requirement = scaledRequirement(tierDef.requiredCount, scaleFactor);
+      if (newCount <= requirement) credit(sub.teamMember, tierDef.points / requirement);
+    }
+  }
+
+  return pointsByRsn;
+}
+
 /** The bonus tier a team has earned for a row/column (null = line not complete). */
 export function getLineBonusTier(tiles: TileForScoring[], positions: number[], teamId: string, scaleFactor: number = 1): number | null {
   const tileByPos = new Map(tiles.map((t) => [t.position, t]));

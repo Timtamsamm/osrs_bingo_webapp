@@ -9,7 +9,7 @@ import TeamProgressChart from "./TeamProgressChart";
 import TeamBoardGrid from "./TeamBoardGrid";
 import BoardTabNav from "@/app/components/BoardTabNav";
 import ZoomableThumbnail from "@/app/components/ZoomableThumbnail";
-import { computeStandings, bonusPts, getRows, getCols, scaledRequirement, scaleFactorFor, normalizedTeamSize, type TierDef, type BonusConfig, type PointsConfig } from "@/lib/scoring";
+import { computeStandings, bonusPts, getRows, getCols, scaledRequirement, scaleFactorFor, normalizedTeamSize, normalizeRsn, creditIndividualPoints, type TierDef, type BonusConfig, type PointsConfig } from "@/lib/scoring";
 
 interface PointEvent {
   date: Date;
@@ -101,10 +101,7 @@ export default async function TeamPage({ params }: Props) {
   // Individual contribution tracking — attributes each submission's points
   // to whoever actually made it (via teamMember, the RSN Dink/manual
   // submission set), so we can show a per-player leaderboard alongside the
-  // team-wide totals below.
-  function normalizeRsn(rsn: string): string {
-    return rsn.trim().replace(/[_ ]/g, " ").toLowerCase();
-  }
+  // team-wide totals below. Shared with the site-wide /bingo/leaderboard page.
   interface PlayerContribution {
     rsn: string;
     points: number;
@@ -115,10 +112,9 @@ export default async function TeamPage({ params }: Props) {
   for (const p of team.participants) {
     contributionByRsn.set(normalizeRsn(p.rsn), { rsn: p.rsn, points: 0, tilesCompleted: 0, drops: 0 });
   }
-  function creditPoints(teamMember: string | null, amount: number) {
-    if (!teamMember || amount <= 0) return;
-    const entry = contributionByRsn.get(normalizeRsn(teamMember));
-    if (entry) entry.points += amount;
+  for (const [norm, pts] of creditIndividualPoints(approved, tierDefsByTile, pointsConfigByTile, scaleFactor)) {
+    const entry = contributionByRsn.get(norm);
+    if (entry) entry.points += pts;
   }
   for (const sub of approved) {
     if (!sub.teamMember) continue;
@@ -176,7 +172,6 @@ export default async function TeamPage({ params }: Props) {
       const newTotal = hasTarget ? Math.min(prevTotal + sub.pointsAwarded, cfg.target!) : prevTotal + sub.pointsAwarded;
       pointsTotalByTile.set(sub.tileId, newTotal);
       const delta = newTotal - prevTotal;
-      creditPoints(sub.teamMember, delta);
 
       if (sub.dinkItemId != null) {
         const received = itemsReceivedByTile.get(sub.tileId) ?? new Set<number>();
@@ -213,10 +208,6 @@ export default async function TeamPage({ params }: Props) {
       const newCount = (countByTileTier.get(key) ?? 0) + 1;
       countByTileTier.set(key, newCount);
       const requirement = scaledRequirement(tierDef.requiredCount, scaleFactor);
-      // Credit an even share of the tier's points to every submission that
-      // counted toward reaching it (not just whichever one tipped it over) —
-      // duplicates beyond the requirement earn nothing, same as the team.
-      if (newCount <= requirement) creditPoints(sub.teamMember, tierDef.points / requirement);
       if (newCount !== requirement) continue;
 
       tile = tileById.get(sub.tileId);

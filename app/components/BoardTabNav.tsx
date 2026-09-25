@@ -11,7 +11,7 @@ export default function BoardTabNav() {
       <div className="flex bg-surface/80 border border-purple-900/40 rounded-xl p-1 gap-1 shrink-0">
         <TabLink href="/bingo/board" active={pathname === "/bingo/board"}>Board</TabLink>
         <TabLink href="/bingo/teams" active={pathname === "/bingo/teams" || pathname.startsWith("/bingo/team/")}>Teams</TabLink>
-        <TabLink href="/bingo/players" active={pathname === "/bingo/players"}>Players</TabLink>
+        <TabLink href="/bingo/leaderboard" active={pathname === "/bingo/leaderboard"}>Leaderboard</TabLink>
         <TabLink href="/bingo/recent-drops" active={pathname === "/bingo/recent-drops"}>Recent Drops</TabLink>
         <TabLink href="/bingo/rules" active={pathname === "/bingo/rules"}>Rules</TabLink>
       </div>
