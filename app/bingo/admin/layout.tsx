@@ -14,7 +14,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <div className="px-4 py-3 md:px-6 md:py-5 border-b border-purple-900/40">
           <p className="text-[10px] text-purple-600 uppercase tracking-widest mb-1">Admin</p>
           <p className="font-[family-name:var(--font-cinzel)] font-bold text-purple-300 heading-glow text-sm">
-            Wong Tongs
+            Bingo Beasts
           </p>
         </div>
         <nav className="flex flex-row md:flex-col gap-1 p-2 md:p-3 overflow-x-auto md:overflow-visible md:flex-1">
@@ -25,20 +25,20 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <NavLink href="/bingo/admin/bosses">Boss Items</NavLink>
           <NavLink href="/bingo/admin/rules">Rules</NavLink>
         </nav>
-        <div className="flex flex-row md:flex-col gap-1 p-2 md:p-3 border-t border-purple-900/30 overflow-x-auto md:overflow-visible">
+        <div className="flex flex-row md:flex-col gap-2 p-2 md:p-3 border-t border-purple-900/30 overflow-x-auto md:overflow-visible">
           <Link
             href="/bingo/board"
-            className="shrink-0 whitespace-nowrap text-sm text-purple-600 hover:text-purple-300 px-3 py-2 rounded-lg transition-colors"
+            className="shrink-0 whitespace-nowrap flex items-center gap-1.5 text-sm text-purple-300 hover:text-white border border-purple-800/50 bg-surface/60 hover:border-purple-600/60 hover:bg-raised/60 px-3.5 py-2 rounded-lg font-medium transition-colors"
           >
             ← Board
           </Link>
           <Link
             href="/"
-            className="shrink-0 whitespace-nowrap text-sm text-purple-600 hover:text-purple-300 px-3 py-2 rounded-lg transition-colors"
+            className="shrink-0 whitespace-nowrap flex items-center gap-1.5 text-sm text-purple-300 hover:text-white border border-purple-800/50 bg-surface/60 hover:border-purple-600/60 hover:bg-raised/60 px-3.5 py-2 rounded-lg font-medium transition-colors"
           >
             ← Home
           </Link>
-          <LogoutButton className="shrink-0 whitespace-nowrap text-sm text-purple-600 hover:text-red-400 px-3 py-2 rounded-lg transition-colors" />
+          <LogoutButton className="shrink-0 whitespace-nowrap flex items-center gap-1.5 text-sm text-purple-300 hover:text-red-300 border border-purple-800/50 bg-surface/60 hover:border-red-700/50 hover:bg-red-950/30 px-3.5 py-2 rounded-lg font-medium transition-colors" />
         </div>
       </aside>
       <main className="flex-1 min-w-0 p-4 md:p-6 overflow-auto">{children}</main>

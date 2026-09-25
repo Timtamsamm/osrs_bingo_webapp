@@ -35,20 +35,26 @@ export default async function RecentDropsPage() {
     <div className="min-h-screen bg-base text-white">
       <div className="max-w-4xl mx-auto px-4 py-8">
         <div className="text-center mb-8 relative">
-          <p className="text-xs tracking-[0.3em] text-purple-500 uppercase mb-2">{board?.name ?? "Bingo Event"}</p>
-          <h1 className="font-[family-name:var(--font-cinzel)] text-4xl font-black text-white heading-glow">
-            Recent Drops
-          </h1>
           <div className="absolute left-0 top-0">
-            <Link href="/" className="text-xs text-purple-500 hover:text-purple-300 transition-colors font-medium">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-1.5 rounded-full border border-purple-800/50 bg-surface/60 px-3.5 py-2 text-sm text-purple-300 hover:text-white hover:border-purple-600/60 hover:bg-raised/60 transition-colors font-medium"
+            >
               ← Home
             </Link>
           </div>
           <div className="absolute right-0 top-0">
-            <Link href="/bingo/admin" className="text-xs text-purple-500 hover:text-purple-300 transition-colors font-medium">
+            <Link
+              href="/bingo/admin"
+              className="inline-flex items-center gap-1.5 rounded-full border border-purple-800/50 bg-surface/60 px-3.5 py-2 text-sm text-purple-300 hover:text-white hover:border-purple-600/60 hover:bg-raised/60 transition-colors font-medium"
+            >
               Admin →
             </Link>
           </div>
+          <h1 className="font-[family-name:var(--font-cinzel)] text-4xl font-black text-white heading-glow pt-1">
+            Recent Drops
+          </h1>
+          <p className="text-xs tracking-[0.3em] text-purple-500 uppercase mt-3">{board?.name ?? "Bingo Event"}</p>
         </div>
 
         <BoardTabNav />
