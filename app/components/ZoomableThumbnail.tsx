@@ -35,7 +35,7 @@ export default function ZoomableThumbnail({ src, alt = "", className }: Props) {
         className={`relative shrink-0 cursor-zoom-in ${className ?? "w-10 h-10 rounded overflow-hidden bg-black/30"}`}
         aria-label="Enlarge image"
       >
-        <Image src={src} alt={alt} fill sizes="40px" className="object-cover" />
+        <Image src={src} alt={alt} fill sizes="40px" style={{ objectFit: "cover" }} />
       </button>
 
       {open && (

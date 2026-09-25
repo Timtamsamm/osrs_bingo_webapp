@@ -819,7 +819,7 @@ export default function BoardEditor({ board }: Props) {
                   <>
                     {selectedTile!.imageUrl && (
                       <div className="relative w-full max-w-[200px] aspect-square rounded-lg overflow-hidden bg-[#130a28]">
-                        <Image src={selectedTile!.imageUrl} alt="Tile" fill sizes="400px" className="object-cover" />
+                        <Image src={selectedTile!.imageUrl} alt="Tile" fill sizes="400px" style={{ objectFit: "cover" }} />
                         <button
                           type="button"
                           onClick={async () => {

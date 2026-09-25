@@ -55,6 +55,14 @@ export default function SubmissionReviewer({ submission: s }: { submission: Subm
     router.refresh();
   }
 
+  function rejectWithConfirm() {
+    const message = isApproved
+      ? "Reject this submission? This undoes its auto-approval."
+      : "Reject this submission?";
+    if (!confirm(message)) return;
+    decide("REJECTED");
+  }
+
   const submitterLabel = s.team?.name
     ? `${s.team.name}${s.teamMember ? ` · RSN: ${s.teamMember}` : ""}`
     : s.teamMember ?? "Unknown";
@@ -100,7 +108,7 @@ export default function SubmissionReviewer({ submission: s }: { submission: Subm
             className="relative w-64 h-36 shrink-0 rounded-lg overflow-hidden bg-[#130a28] group cursor-zoom-in"
             title="Click to enlarge"
           >
-            <Image src={s.imageUrl} alt="Submission" fill sizes="256px" className="object-cover" />
+            <Image src={s.imageUrl} alt="Submission" fill sizes="256px" style={{ objectFit: "cover" }} />
             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
               <span className="text-white text-xl opacity-0 group-hover:opacity-100 transition-opacity">⤢</span>
             </div>
@@ -165,11 +173,11 @@ export default function SubmissionReviewer({ submission: s }: { submission: Subm
                 Approve
               </button>
             )}
-            <div className={`flex rounded-lg overflow-hidden border border-red-800/50 ${isApproved ? "flex-1" : ""}`}>
+            <div className="flex shrink-0 rounded-lg overflow-hidden border border-red-800/50">
               <button
-                onClick={() => decide("REJECTED")}
+                onClick={rejectWithConfirm}
                 disabled={loading}
-                className="flex-1 bg-red-900/70 hover:bg-red-800 disabled:opacity-50 text-white font-semibold py-2 text-sm transition-colors"
+                className="bg-red-900/70 hover:bg-red-800 disabled:opacity-50 text-white font-semibold px-5 py-2 text-sm transition-colors"
               >
                 Reject
               </button>
