@@ -61,18 +61,18 @@ export async function GET(req: NextRequest) {
     lootSendImage: true,
     collectionSendImage: true,
     petSendImage: true,
-    // Dink lets a player set a per-notifier "Webhook Override" (Loot/
-    // Collection/Pet) that, if non-blank, REPLACES the primary webhook for
-    // that notification type only — so a player who's pointed one of these
-    // at their own Discord channel silently stops reaching us for that
-    // notifier, even though discordWebhook above is set correctly. Confirmed
-    // in production: a Collection Log pet notification reached the player's
-    // own channel but never hit this endpoint. These three keys are
-    // Dink-side "merge" (append-as-new-line) config keys on import, not
-    // replace — so setting our own URL here adds us alongside whatever
-    // override the player already has, rather than clobbering it.
-    lootWebhook: url,
-    collectionWebhook: url,
-    petWebhook: url,
+    // We intentionally do NOT set lootWebhook/collectionWebhook/petWebhook
+    // (Dink's per-notifier "Webhook Override" fields). Dink reads override-
+    // if-set, else primary — never both (BaseNotifier#createMessage). Most
+    // players never touch these overrides, so they're blank and Dink falls
+    // back to discordWebhook above, reaching both us and the player's own
+    // channel. Forcing our URL into these fields (previously done here)
+    // created an override from scratch for players who didn't have one,
+    // which made Dink stop reading primary for those three notification
+    // types — silently cutting the player's own channel off from Loot/
+    // Collection/Pet notifications specifically. The one case this doesn't
+    // cover — a player who already has their own per-notifier override set
+    // — needs that player to manually add our webhook as an extra line in
+    // their override box; not worth trading away the common case for.
   });
 }
