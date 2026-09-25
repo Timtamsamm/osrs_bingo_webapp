@@ -209,12 +209,22 @@ export function diffTempleStats(current: TempleStats, baseline: TempleStats | nu
 }
 
 /**
- * Takes a one-time TempleOSRS baseline snapshot of every participant, so
- * stats can be shown as "gained since the event started" instead of lifetime
- * totals. Safe to call on every page load that shows Temple stats — it's a
- * no-op unless the board has actually started and no snapshot exists yet.
- * The atomic conditional update means only one concurrent caller actually
- * does the work; the rest see count 0 and return immediately.
+ * Takes a TempleOSRS baseline snapshot of every participant, so stats can be
+ * shown as "gained since the event started" instead of lifetime totals. Safe
+ * to call on every page load that shows Temple stats.
+ *
+ * The first call after the board starts snapshots everyone (gated by the
+ * atomic conditional update, so only one concurrent caller does the work).
+ * Every later call re-checks for participants still missing a baseline —
+ * e.g. TempleOSRS hadn't crawled them yet at the original snapshot time, or
+ * they joined a team after the board started — and retries just those.
+ * Without this retry, a player who simply failed to fetch at that first
+ * moment stayed without a baseline forever, and diffTempleStats treats a
+ * missing baseline as "no snapshot" and falls back to raw current stats —
+ * silently injecting that one player's full lifetime totals into team/player
+ * "gained since start" numbers indefinitely. A late baseline is later than
+ * the true start for that one straggler, but far closer to correct than
+ * their lifetime total.
  */
 export async function ensureTempleSnapshotTaken(boardId: string, startsAt: Date | null): Promise<void> {
   if (!startsAt || startsAt > new Date()) return;
@@ -223,11 +233,19 @@ export async function ensureTempleSnapshotTaken(boardId: string, startsAt: Date 
     where: { id: boardId, templeSnapshotTakenAt: null },
     data: { templeSnapshotTakenAt: new Date() },
   });
-  if (claimed.count === 0) return;
 
   const participants = await prisma.participant.findMany({ select: { rsn: true } });
+
+  let targets = participants;
+  if (claimed.count === 0) {
+    const existing = await prisma.templeSnapshot.findMany({ where: { boardId }, select: { rsn: true } });
+    const have = new Set(existing.map((s) => s.rsn));
+    targets = participants.filter((p) => !have.has(p.rsn));
+    if (targets.length === 0) return;
+  }
+
   await Promise.all(
-    participants.map(async (p) => {
+    targets.map(async (p) => {
       const [stats, clog] = await Promise.all([fetchTempleStats(p.rsn), fetchCollectionLogStats(p.rsn)]);
       if (!stats) return;
       await prisma.templeSnapshot.upsert({
