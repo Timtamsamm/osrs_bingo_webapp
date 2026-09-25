@@ -60,7 +60,7 @@ export default function LoginPage() {
 
         <div className="text-center mb-8">
           <h1 className="font-[family-name:var(--font-cinzel)] text-3xl font-black text-white heading-glow mb-1">
-            Wong Tongs
+            Bingo Beasts
           </h1>
           <p className="text-purple-500 text-sm">Admin access</p>
         </div>

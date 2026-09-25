@@ -75,9 +75,9 @@ const cinzel = Cinzel({
   weight: ["700", "900"],
 });
 
-const SITE_TITLE = "Wong Tongs";
-const SITE_DESCRIPTION = "Wong Tongs clan hub — bingo, events, and member stats.";
-const SITE_IMAGE = "/WONG_TONGS_2026_06_24_00_50_40_UTC.png";
+const SITE_TITLE = "Bingo Beasts";
+const SITE_DESCRIPTION = "Bingo Beasts clan hub — bingo and member stats.";
+const SITE_IMAGE = "/bingo-beasts-logo.webp";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.upthetongs.com"),
