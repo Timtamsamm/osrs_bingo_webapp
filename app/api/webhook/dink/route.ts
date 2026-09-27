@@ -192,20 +192,43 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Real boss names (e.g. "Artio", "Kalphite Queen") — used below to rule
+  // out a candidate tile that's clearly a *different* specific boss than
+  // the drop's actual source, even when the right tile's title doesn't
+  // literally name that boss (e.g. a combined "Wildy Bosses ALL" tile).
+  const knownBossNames = new Set(
+    (await prisma.boss.findMany({ select: { name: true } })).map((b) => b.name.trim().toLowerCase())
+  );
+
   // When an item ID is ambiguous (belongs to more than one tile), use the
   // drop's actual source — the boss/NPC name Dink reports — to pick the
   // right one, instead of arbitrarily taking whichever tile happened to be
-  // first. Falls back to the first candidate only if none of the tile
-  // titles match the source (e.g. a combined tile like "Wildy Bosses ALL"
-  // that doesn't literally contain a specific boss's name).
+  // first.
+  //
+  // First choice: a tile whose title directly names the source boss (a
+  // dedicated "Artio" tile for a drop from Artio).
+  //
+  // Otherwise: rule out any candidate tile whose title exactly matches a
+  // *different* real boss name from the reference database — a drop from
+  // Artio should never land on a tile titled "Kalphite Queen" just because
+  // it happened to be first, even though neither tile's title matches
+  // "Artio". Whatever survives that exclusion is usually a combined/
+  // catch-all tile (e.g. "Wildy Bosses ALL") that doesn't name any single
+  // boss, so it's a safe destination when the source's own dedicated tile
+  // isn't one of the candidates. Falls back to the first candidate only if
+  // every candidate gets excluded (shouldn't happen in practice).
   function pickForSource<T extends { tileTitle: string }>(candidates: T[], source: string | null): T {
     if (candidates.length === 1 || !source) return candidates[0];
     const normalizedSource = source.trim().toLowerCase();
+
     const bySource = candidates.find((c) => {
       const title = c.tileTitle.trim().toLowerCase();
       return title.includes(normalizedSource) || normalizedSource.includes(title);
     });
-    return bySource ?? candidates[0];
+    if (bySource) return bySource;
+
+    const notADifferentBoss = candidates.filter((c) => !knownBossNames.has(c.tileTitle.trim().toLowerCase()));
+    return notADifferentBoss[0] ?? candidates[0];
   }
 
   // LOOT always reports its source NPC/boss name; COLLECTION sometimes does
@@ -276,6 +299,7 @@ export async function POST(req: NextRequest) {
           source: "dink",
           dinkItemId: item.id,
           dinkItemName: item.name,
+          dinkSource: dropSource,
           teamMember: playerName,
           pointsAwarded,
         },
@@ -341,6 +365,7 @@ export async function POST(req: NextRequest) {
         source: "dink",
         dinkItemId: item.id,
         dinkItemName: item.name,
+        dinkSource: dropSource,
         teamMember: playerName,
         tier: targetTier.tier,
       },
