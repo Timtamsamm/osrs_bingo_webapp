@@ -151,25 +151,27 @@ export async function POST(req: NextRequest) {
 
   if (droppedItems.length === 0) return NextResponse.json({ status: "no_match" });
 
-  // Map each item ID to the tile it belongs to, and every tier on that tile
-  // whose item list includes it. Usually that's a single tier (each tier has
-  // its own distinct items — e.g. T1 = rare drop, T3 = common drop). If the
-  // *same* item is listed under more than one tier on a tile, that tile is
-  // treated as a shared pool (e.g. "Any 3 pets" with the same pet IDs in
-  // every tier box) — see the branch below.
-  const itemToTile = new Map<number, { tileId: string; tileTitle: string; tierDefs: TierDef[] }>();
+  // Map each item ID to every tile whose item list includes it — a "wide"
+  // unique like Dragon 2h sword legitimately drops from dozens of bosses, so
+  // the same item ID can genuinely belong to more than one tile (e.g. both
+  // an "Artio" tile and a "Kalphite Queen" tile). Within a single tile,
+  // usually that's one tier (each tier has its own distinct items — e.g. T1
+  // = rare drop, T3 = common drop); if the *same* item is listed under more
+  // than one tier on the same tile, that tile is a shared pool (e.g. "Any 3
+  // pets" with identical pet IDs in every tier box) — see the branch below.
+  const itemToTiles = new Map<number, Array<{ tileId: string; tileTitle: string; tierDefs: TierDef[] }>>();
   // Points-mode tiles: unlimited duplicate drops allowed, each worth less
   // than the last (see diminishingPoints in lib/scoring.ts) — no tier concept.
-  const itemToPointsTile = new Map<number, { tileId: string; tileTitle: string; basePoints: number; target: number }>();
+  const itemToPointsTiles = new Map<number, Array<{ tileId: string; tileTitle: string; basePoints: number; target: number }>>();
 
   for (const tile of board.tiles) {
     if (tile.scoringMode === "POINTS") {
       const cfg = tile.pointsConfig as PointsConfig | null;
       if (!cfg) continue;
       for (const item of cfg.items) {
-        if (!itemToPointsTile.has(item.id)) {
-          itemToPointsTile.set(item.id, { tileId: tile.id, tileTitle: tile.title, basePoints: item.basePoints, target: cfg.target });
-        }
+        const arr = itemToPointsTiles.get(item.id) ?? [];
+        arr.push({ tileId: tile.id, tileTitle: tile.title, basePoints: item.basePoints, target: cfg.target });
+        itemToPointsTiles.set(item.id, arr);
       }
       continue;
     }
@@ -184,11 +186,36 @@ export async function POST(req: NextRequest) {
       }
     }
     for (const [itemId, tierDefs] of tiersByItem) {
-      if (!itemToTile.has(itemId)) {
-        itemToTile.set(itemId, { tileId: tile.id, tileTitle: tile.title, tierDefs });
-      }
+      const arr = itemToTiles.get(itemId) ?? [];
+      arr.push({ tileId: tile.id, tileTitle: tile.title, tierDefs });
+      itemToTiles.set(itemId, arr);
     }
   }
+
+  // When an item ID is ambiguous (belongs to more than one tile), use the
+  // drop's actual source — the boss/NPC name Dink reports — to pick the
+  // right one, instead of arbitrarily taking whichever tile happened to be
+  // first. Falls back to the first candidate only if none of the tile
+  // titles match the source (e.g. a combined tile like "Wildy Bosses ALL"
+  // that doesn't literally contain a specific boss's name).
+  function pickForSource<T extends { tileTitle: string }>(candidates: T[], source: string | null): T {
+    if (candidates.length === 1 || !source) return candidates[0];
+    const normalizedSource = source.trim().toLowerCase();
+    const bySource = candidates.find((c) => {
+      const title = c.tileTitle.trim().toLowerCase();
+      return title.includes(normalizedSource) || normalizedSource.includes(title);
+    });
+    return bySource ?? candidates[0];
+  }
+
+  // LOOT always reports its source NPC/boss name; COLLECTION sometimes does
+  // (only when Dink can tie the unlock to a specific kill). PET has no boss
+  // name in its payload, but pet names aren't shared across bosses in OSRS,
+  // so that lookup (below) isn't exposed to this ambiguity in practice.
+  const dropSource: string | null =
+    type === "LOOT" ? (extra.source as string | undefined) ?? null
+    : type === "COLLECTION" ? (extra.dropperName as string | undefined) ?? null
+    : null;
 
   let imageUrl: string | null = null;
   if (imageFile && imageFile.size > 0) {
@@ -209,7 +236,8 @@ export async function POST(req: NextRequest) {
   const matched: string[] = [];
 
   for (const item of droppedItems) {
-    const pointsMatch = itemToPointsTile.get(item.id);
+    const pointsCandidates = itemToPointsTiles.get(item.id);
+    const pointsMatch = pointsCandidates ? pickForSource(pointsCandidates, dropSource) : undefined;
     if (pointsMatch) {
       const { tileId, tileTitle, basePoints } = pointsMatch;
 
@@ -257,7 +285,8 @@ export async function POST(req: NextRequest) {
       continue;
     }
 
-    const match = itemToTile.get(item.id);
+    const tileCandidates = itemToTiles.get(item.id);
+    const match = tileCandidates ? pickForSource(tileCandidates, dropSource) : undefined;
     if (!match) continue;
     const { tileId, tileTitle, tierDefs } = match;
 
