@@ -71,7 +71,7 @@ export default async function TeamPage({ params }: Props) {
   const submissions = board
     ? await prisma.submission.findMany({
         where: { teamId: team.id, tile: { boardId: board.id } },
-        select: { id: true, tileId: true, tier: true, status: true, source: true, teamMember: true, dinkItemName: true, dinkItemId: true, imageUrl: true, note: true, createdAt: true, pointsAwarded: true },
+        select: { id: true, tileId: true, tier: true, status: true, source: true, teamMember: true, dinkItemName: true, dinkItemId: true, dinkSource: true, imageUrl: true, note: true, createdAt: true, pointsAwarded: true },
         orderBy: { createdAt: "asc" },
       })
     : [];
@@ -489,6 +489,7 @@ export default async function TeamPage({ params }: Props) {
                       </p>
                       <p className="text-[11px] text-purple-700/70">
                         {s.teamMember ?? "—"} · {s.source}
+                        {s.dinkSource && <> · from {s.dinkSource}</>}
                         {s.status !== "APPROVED" && <span className="text-amber-500"> · {s.status.toLowerCase()}</span>}
                       </p>
                     </div>

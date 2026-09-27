@@ -148,6 +148,7 @@ model Submission {
   source     String           @default("manual")  // "manual" | "dink"
   dinkItemId   Int?           // OSRS item ID that triggered this (duplicate detection)
   dinkItemName String?        // item name for display in admin queue
+  dinkSource   String?        // boss/NPC name Dink reported the drop came from — lets an item shared across multiple bosses' tiles (e.g. Dragon 2h sword) be traced/filtered by actual source
   tier         Int?           // which tier this submission satisfied (1=hardest, 3=easiest) — TIERED tiles only
   pointsAwarded Float?        // points this specific drop contributed — POINTS-mode tiles only
   createdAt  DateTime         @default(now())

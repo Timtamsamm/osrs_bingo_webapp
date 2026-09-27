@@ -1,8 +1,7 @@
-import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import BoardTabNav from "@/app/components/BoardTabNav";
 import PageHeaderNav from "@/app/components/PageHeaderNav";
-import ZoomableThumbnail from "@/app/components/ZoomableThumbnail";
+import RecentDropsFilter from "./RecentDropsFilter";
 
 const DROPS_LIMIT = 100;
 
@@ -19,6 +18,7 @@ export default async function RecentDropsPage() {
           id: true,
           tier: true,
           source: true,
+          dinkSource: true,
           teamMember: true,
           dinkItemName: true,
           pointsAwarded: true,
@@ -31,6 +31,8 @@ export default async function RecentDropsPage() {
         take: DROPS_LIMIT,
       })
     : [];
+
+  const bosses = [...new Set(drops.map((d) => d.dinkSource).filter((s): s is string => !!s))].sort();
 
   return (
     <div className="min-h-screen bg-base text-white">
@@ -50,34 +52,7 @@ export default async function RecentDropsPage() {
           {drops.length === 0 ? (
             <p className="text-sm text-purple-600/70 text-center py-8">No approved drops yet.</p>
           ) : (
-            <div className="flex flex-col gap-2">
-              {drops.map((d) => (
-                <div key={d.id} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-[#130a28]/60">
-                  {d.imageUrl && <ZoomableThumbnail src={d.imageUrl} />}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-purple-100 truncate">
-                      {d.tile.title}{" "}
-                      {d.tier != null && <span className="text-purple-500">T{d.tier}</span>}
-                      {d.dinkItemName && <span className="text-purple-500"> · {d.dinkItemName}</span>}
-                      {d.pointsAwarded != null && <span className="text-purple-500"> · +{+d.pointsAwarded.toFixed(1)}pts</span>}
-                    </p>
-                    <p className="text-[11px] text-purple-700/70 flex items-center gap-1.5">
-                      {d.team && (
-                        <Link href={`/bingo/team/${d.team.id}`} className="inline-flex items-center gap-1 hover:text-purple-400 transition-colors">
-                          <span className="w-2 h-2 rounded-full shrink-0" style={{ background: d.team.color }} />
-                          {d.team.name}
-                        </Link>
-                      )}
-                      {d.teamMember && <span>· {d.teamMember}</span>}
-                      <span>· {d.source}</span>
-                    </p>
-                  </div>
-                  <span className="text-[11px] text-purple-700/60 shrink-0" suppressHydrationWarning>
-                    {new Date(d.createdAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
-                  </span>
-                </div>
-              ))}
-            </div>
+            <RecentDropsFilter drops={drops} bosses={bosses} />
           )}
         </div>
       </div>

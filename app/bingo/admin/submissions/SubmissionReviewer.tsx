@@ -12,6 +12,7 @@ interface Submission {
   status: string;
   source: string;
   dinkItemName: string | null;
+  dinkSource: string | null;
   teamMember: string | null;
   tier: number | null;
   team: { name: string } | null;
@@ -93,6 +94,9 @@ export default function SubmissionReviewer({ submission: s }: { submission: Subm
             {submitterLabel}
             {s.dinkItemName && (
               <> · <span className="text-purple-300">{s.dinkItemName}</span></>
+            )}
+            {s.dinkSource && (
+              <> · <span className="text-purple-600">from {s.dinkSource}</span></>
             )}
             {" · "}
             <span suppressHydrationWarning>{new Date(s.createdAt).toLocaleDateString()}</span>
