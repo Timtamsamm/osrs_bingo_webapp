@@ -7,6 +7,7 @@ import Link from "next/link";
 import ImageCropper from "@/app/components/ImageCropper";
 import BossItemPickerButton from "./BossItemPicker";
 import { parseItemLines as parseDinkItems, itemLinesToText as dinkItemsToText } from "@/lib/itemListFormat";
+import { parsePreset } from "@/lib/boardPreset";
 import { DndContext, DragOverlay, useDraggable, useDroppable, PointerSensor, useSensor, useSensors, type DragStartEvent, type DragEndEvent } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 
@@ -373,6 +374,60 @@ export default function BoardEditor({ board }: Props) {
     setCropSrc(null);
   }
 
+  const [importing, setImporting] = useState(false);
+  const [importNote, setImportNote] = useState("");
+
+  // Loads a preset file into the editor (not saved until "Save changes").
+  // Embedded data-URL images are uploaded fresh so they survive a board reset.
+  async function importPreset(file: File) {
+    if (!confirm("Replace the editor's board details and all tiles with this preset? Nothing is saved until you click Save. Event times and the Dink token are kept.")) return;
+    setImporting(true);
+    setError("");
+    setImportNote("");
+    try {
+      const preset = parsePreset(JSON.parse(await file.text()));
+      let failedImages = 0;
+      const imported = await Promise.all(
+        preset.tiles.map(async (t) => {
+          let imageUrl = t.image;
+          if (imageUrl?.startsWith("data:")) {
+            const blob = await (await fetch(imageUrl)).blob();
+            const form = new FormData();
+            form.append("file", blob, `tile-${t.position}.${blob.type.split("/")[1] ?? "jpg"}`);
+            const res = await fetch("/api/admin/tiles/image", { method: "POST", body: form });
+            if (res.ok) imageUrl = (await res.json()).url;
+            else { imageUrl = null; failedImages++; }
+          }
+          return makeTileState({
+            id: "", position: t.position, title: t.title, description: t.description, rules: t.rules, imageUrl,
+            scoringMode: t.scoringMode, tiers: t.tiers as TierDef[] | null, pointsConfig: t.pointsConfig as PointsConfig | null,
+          });
+        })
+      );
+      const map: Record<number, TileState> = {};
+      for (let i = 0; i < MAX_SIZE * MAX_SIZE; i++) map[i] = makeTileState(undefined);
+      preset.tiles.forEach((t, i) => { map[t.position] = imported[i]; });
+      setTiles(map);
+      setBoardName(preset.name);
+      setBoardDesc(preset.description ?? "");
+      setBoardSize(preset.size);
+      setBonusT1(preset.rowColBonuses.t1);
+      setBonusT2(preset.rowColBonuses.t2);
+      setBonusT3(preset.rowColBonuses.t3);
+      setScaleByTeamSize(preset.scaleByTeamSize);
+      setSelected(null);
+      setImportNote(
+        `Loaded "${preset.name}" (${preset.tiles.filter((t) => t.title.trim()).length} tiles)` +
+        (failedImages ? ` — ${failedImages} image(s) failed to upload` : "") +
+        ". Review, then click Save changes."
+      );
+    } catch (err) {
+      setError(err instanceof Error ? `Import failed: ${err.message}` : "Import failed");
+    } finally {
+      setImporting(false);
+    }
+  }
+
   async function saveBoard() {
     setSaving(true);
     setError("");
@@ -422,6 +477,26 @@ export default function BoardEditor({ board }: Props) {
 
   return (
     <div className="flex flex-col gap-5">
+      {/* Presets */}
+      <div className="bg-[#0e0820] border border-purple-900/40 rounded-xl p-4 flex flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="font-semibold text-purple-100 text-sm mr-auto">Board Preset</h2>
+          {board && (
+            <a href="/api/admin/board/export" download className="text-xs bg-purple-900/50 hover:bg-purple-800/60 border border-purple-700/40 text-purple-300 rounded-lg px-3 py-1.5 transition-colors">
+              Export saved board
+            </a>
+          )}
+          <label className={`text-xs bg-purple-900/50 hover:bg-purple-800/60 border border-purple-700/40 text-purple-300 rounded-lg px-3 py-1.5 transition-colors cursor-pointer ${importing ? "opacity-50 pointer-events-none" : ""}`}>
+            <input type="file" accept="application/json,.json" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) importPreset(f); e.target.value = ""; }} />
+            {importing ? "Importing…" : "Import preset"}
+          </label>
+        </div>
+        <p className="text-[11px] text-purple-700/60">
+          Export downloads the saved tiles, images and board settings as a file. Import loads one back into the editor — event times and the Dink token aren&apos;t included.
+        </p>
+        {importNote && <p className="text-xs text-emerald-400">{importNote}</p>}
+      </div>
+
       {/* Board meta */}
       <div className="bg-[#0e0820] border border-purple-900/40 rounded-xl p-4 flex flex-col gap-3">
         <h2 className="font-semibold text-purple-100 text-sm">Board Details</h2>

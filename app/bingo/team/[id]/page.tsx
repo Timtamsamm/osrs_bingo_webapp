@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { prisma } from "@/lib/prisma";
+import { getPreStartGate } from "@/app/components/PreStartGate";
 import { auth } from "@/auth";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -22,6 +23,9 @@ interface Props {
 }
 
 export default async function TeamPage({ params }: Props) {
+  const gate = await getPreStartGate();
+  if (gate) return gate;
+
   const { id } = await params;
 
   const session = await auth();

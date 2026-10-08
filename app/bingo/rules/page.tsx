@@ -1,11 +1,15 @@
 export const dynamic = "force-dynamic";
 
 import { prisma } from "@/lib/prisma";
+import { getPreStartGate } from "@/app/components/PreStartGate";
 import { getSettings } from "@/lib/settings";
 import BoardTabNav from "@/app/components/BoardTabNav";
 import PageHeaderNav from "@/app/components/PageHeaderNav";
 
 export default async function RulesPage() {
+  const gate = await getPreStartGate();
+  if (gate) return gate;
+
   const [board, settings] = await Promise.all([
     prisma.bingoBoard.findFirst({
       where: { active: true },

@@ -1,12 +1,16 @@
 export const dynamic = "force-dynamic";
 
 import { prisma } from "@/lib/prisma";
+import { getPreStartGate } from "@/app/components/PreStartGate";
 import Link from "next/link";
 import BoardTabNav from "@/app/components/BoardTabNav";
 import PageHeaderNav from "@/app/components/PageHeaderNav";
 import { computeStandings, type TierDef, type BonusConfig, type PointsConfig } from "@/lib/scoring";
 
 export default async function TeamsPage() {
+  const gate = await getPreStartGate();
+  if (gate) return gate;
+
   const [board, teams] = await Promise.all([
     prisma.bingoBoard.findFirst({
       where: { active: true },

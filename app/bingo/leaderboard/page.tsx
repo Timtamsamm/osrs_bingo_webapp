@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { prisma } from "@/lib/prisma";
+import { getPreStartGate } from "@/app/components/PreStartGate";
 import BoardTabNav from "@/app/components/BoardTabNav";
 import PageHeaderNav from "@/app/components/PageHeaderNav";
 import LeaderboardTable from "./LeaderboardTable";
@@ -24,6 +25,9 @@ interface SubmissionForCredit {
 }
 
 export default async function LeaderboardPage() {
+  const gate = await getPreStartGate();
+  if (gate) return gate;
+
   const [board, participants] = await Promise.all([
     prisma.bingoBoard.findFirst({
       where: { active: true },

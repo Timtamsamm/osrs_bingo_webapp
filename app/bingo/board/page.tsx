@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { prisma } from "@/lib/prisma";
+import { getPreStartGate } from "@/app/components/PreStartGate";
 import Link from "next/link";
 import BoardTabNav from "@/app/components/BoardTabNav";
 import Countdown from "@/app/components/Countdown";
@@ -10,6 +11,9 @@ import type { TileSummary, LineSummary, BonusConfig } from "./BoardView";
 import { computeStandings, getLineBonusTier, getRows, getCols, pointsNominalMax, pointsTileProgress, scaledRequirement, scaleFactorFor, normalizedTeamSize, type TierDef, type PointsConfig } from "@/lib/scoring";
 
 export default async function BoardPage() {
+  const gate = await getPreStartGate();
+  if (gate) return gate;
+
   const [board, rawTeams] = await Promise.all([
     prisma.bingoBoard.findFirst({
       where: { active: true },
@@ -132,24 +136,6 @@ export default async function BoardPage() {
   }));
 
   const boardIsEmpty = !board || scoringTiles.every((t) => !t.title.trim());
-
-  if (board?.startsAt && board.startsAt > new Date()) {
-    return (
-      <div className="min-h-screen bg-base flex items-center justify-center p-6">
-        <div className="text-center flex flex-col items-center gap-6">
-          <p className="text-xs tracking-[0.3em] text-purple-500 uppercase">Upcoming Event</p>
-          <h1 className="font-[family-name:var(--font-cinzel)] text-4xl font-black text-white heading-glow">
-            {board.name}
-          </h1>
-          {board.description && <p className="text-purple-300/70 text-sm max-w-sm">{board.description}</p>}
-          <Countdown endsAt={board.startsAt.toISOString()} label="Starts in" reloadOnExpire />
-          <p className="text-sm text-purple-500/60">
-            {board.startsAt.toLocaleString(undefined, { dateStyle: "long", timeStyle: "short" })}
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   const medals = ["🥇", "🥈", "🥉"];
 

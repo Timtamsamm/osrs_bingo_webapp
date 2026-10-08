@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { getPreStartGate } from "@/app/components/PreStartGate";
 import BoardTabNav from "@/app/components/BoardTabNav";
 import PageHeaderNav from "@/app/components/PageHeaderNav";
 import RecentDropsFilter from "./RecentDropsFilter";
@@ -6,6 +7,9 @@ import RecentDropsFilter from "./RecentDropsFilter";
 const DROPS_LIMIT = 100;
 
 export default async function RecentDropsPage() {
+  const gate = await getPreStartGate();
+  if (gate) return gate;
+
   const board = await prisma.bingoBoard.findFirst({
     where: { active: true },
     select: { id: true, name: true },

@@ -43,3 +43,6 @@ next-env.d.ts
 
 /app/generated/prisma
 prisma/seed.ts
+
+# local board backups (contain embedded images)
+/backups/
