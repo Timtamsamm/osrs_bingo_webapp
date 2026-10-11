@@ -128,12 +128,12 @@ export default async function EventPage({ params }: Props) {
 
         <div className="grid grid-cols-3 gap-3 mb-8">
           <StatTile
-            label={roster ? `of ${roster.size} members` : "Attendees"}
+            label="Participants"
             value={members.length.toLocaleString()}
             sub={guests.length ? `+${guests.length} guest${guests.length === 1 ? "" : "s"}` : undefined}
           />
-          <StatTile label="Kills" value={totalKills.toLocaleString()} />
-          <StatTile label="Loot value" value={formatGp(totalValue)} />
+          <StatTile label="Total kills" sub="whole event" value={totalKills.toLocaleString()} />
+          <StatTile label="Total loot value" sub="whole event" value={formatGp(totalValue)} />
         </div>
 
         <section className="mb-8">
