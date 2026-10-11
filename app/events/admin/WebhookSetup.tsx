@@ -67,9 +67,16 @@ export default function WebhookSetup({ origin, initialToken }: { origin: string;
         <div>
           <p className="font-semibold text-purple-100 mb-1">Players — kills &amp; drops (optional)</p>
           <ol className="list-decimal list-inside space-y-0.5">
-            <li>In Dink, paste the link on a new line in <b>Primary Webhook URLs</b> — existing lines (Discord, bingo) keep working.</li>
-            <li>In <b>Kill Count</b>, tick <b>Enable Kill Count</b> and set <b>Kill Count Interval</b> to <b>1</b> (the default 50 only reports every 50th kill).</li>
-            <li>In <b>Loot</b>, tick <b>Enable loot</b> — <b>Min Loot value</b> decides which drops are reported.</li>
+            <li>
+              <b>Kills:</b> paste the link in <b>Webhook Overrides → Chat Webhook Override</b>. In <b>Custom Chat Messages</b>, tick{" "}
+              <b>Enable Chat Notifications</b>, keep <b>Game Engine</b> selected in <b>Message Types</b>, and add{" "}
+              <code>Your * count is: *</code> to <b>Message Filters</b>. Every kill is sent only to this site — your Kill Count Interval and
+              other webhooks are untouched.
+            </li>
+            <li>
+              <b>Drops:</b> paste the link on a new line in <b>Primary Webhook URLs</b> (existing lines keep working) and tick{" "}
+              <b>Enable loot</b> — <b>Min Loot value</b> decides which drops are reported.
+            </li>
           </ol>
           <p className="mt-1.5 text-purple-500/80">Data outside an event&apos;s time window is ignored. A kill or drop during an event also counts as checking in.</p>
         </div>

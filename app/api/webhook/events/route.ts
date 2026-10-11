@@ -17,6 +17,27 @@ import { matchesBossFilter, recordAttendance } from "@/lib/clanEvents";
 //   They report from their own client, so worlds and instances don't matter.
 
 const CHAT_TYPES = new Set(["CLAN_CHAT", "CLAN_GUEST_CHAT", "FRIENDSCHAT"]);
+
+// The game's own kill count messages, e.g. "Your Giant Mole kill count is: 37."
+// Same patterns Dink's KillCountNotifier uses. Players can forward these via
+// Dink's chat notifier (Message Filter "Your * count is: *") to get every
+// kill reported without lowering Dink's global Kill Count Interval, which
+// would also flood their other webhooks.
+const KC_PRIMARY = /Your (.+)\s(kill|chest|completion|harvest|success|opened|lap|Total Ticket)\s?count is: ?([\d,]+)\b/i;
+const KC_SECONDARY = /Your (?:completed|subdued) (.+) count is: ([\d,]+)\b/;
+
+function parseKillCountMessage(message: string): { boss: string; count: number } | null {
+  const primary = KC_PRIMARY.exec(message);
+  if (primary) {
+    // Agility lap counts use the same message shape — they aren't kills.
+    if (primary[2].toLowerCase() === "lap") return null;
+    return { boss: primary[1].trim(), count: parseInt(primary[3].replace(/,/g, ""), 10) };
+  }
+  const secondary = KC_SECONDARY.exec(message);
+  if (secondary) return { boss: secondary[1].trim(), count: parseInt(secondary[2].replace(/,/g, ""), 10) };
+  return null;
+}
+
 const INT_MAX = 2_147_483_647;
 
 function toInt(value: unknown): number | null {
@@ -77,6 +98,13 @@ export async function POST(req: NextRequest) {
 
   if (type === "CHAT") {
     const chatType = extra.type as string | undefined;
+    if (chatType === "GAMEMESSAGE" && playerName) {
+      const kc = parseKillCountMessage((extra.message as string | undefined) ?? "");
+      if (!kc) return NextResponse.json({ status: "ignored" });
+      const recorded = await recordKill(liveEvents, playerName, kc.boss, kc.count, [], now);
+      return NextResponse.json({ status: recorded ? "recorded" : "ignored" });
+    }
+
     const sender = extra.source as string | undefined;
     const message = (extra.message as string | undefined)?.trim().toLowerCase();
     if (!chatType || !CHAT_TYPES.has(chatType) || !sender || !message) {
@@ -99,26 +127,8 @@ export async function POST(req: NextRequest) {
     : [];
 
   if (type === "KILL_COUNT") {
-    const boss = extra.boss as string | undefined;
-    const matching = liveEvents.filter((e) => matchesBossFilter(e.bossFilter, boss));
-    for (const event of matching) {
-      await prisma.clanEventActivity.create({
-        data: {
-          eventId: event.id,
-          rsn: playerName,
-          rsnKey: normalizeRsn(playerName),
-          type: "KILL",
-          source: boss ?? null,
-          killCount: toInt(extra.count),
-          createdAt: now,
-        },
-      });
-      await recordAttendance(event.id, playerName, "kill", now);
-      // Raid party members count as attending even if they don't run the
-      // events webhook themselves.
-      for (const member of party) await recordAttendance(event.id, member, "party", now);
-    }
-    return NextResponse.json({ status: matching.length ? "recorded" : "ignored" });
+    const recorded = await recordKill(liveEvents, playerName, extra.boss as string | undefined, toInt(extra.count), party, now);
+    return NextResponse.json({ status: recorded ? "recorded" : "ignored" });
   }
 
   // LOOT
@@ -165,4 +175,46 @@ export async function POST(req: NextRequest) {
     for (const member of party) await recordAttendance(event.id, member, "party", now);
   }
   return NextResponse.json({ status: "recorded" });
+}
+
+/**
+ * Records one kill against every live event whose boss filter it passes.
+ * A kill can arrive twice — once as a KILL_COUNT notification (when the
+ * player's Kill Count Interval happens to hit) and once as a forwarded KC
+ * chat message — so skip it if the same player already has this kill count
+ * for this boss recorded.
+ */
+async function recordKill(
+  liveEvents: Array<{ id: string; bossFilter: string | null }>,
+  playerName: string,
+  boss: string | undefined,
+  killCount: number | null,
+  party: string[],
+  now: Date
+): Promise<boolean> {
+  const rsnKey = normalizeRsn(playerName);
+  const matching = liveEvents.filter((e) => matchesBossFilter(e.bossFilter, boss));
+  for (const event of matching) {
+    if (killCount != null) {
+      const duplicate = await prisma.clanEventActivity.findFirst({
+        where: {
+          eventId: event.id,
+          rsnKey,
+          type: "KILL",
+          killCount,
+          source: { equals: boss ?? "", mode: "insensitive" },
+        },
+        select: { id: true },
+      });
+      if (duplicate) continue;
+    }
+    await prisma.clanEventActivity.create({
+      data: { eventId: event.id, rsn: playerName, rsnKey, type: "KILL", source: boss ?? null, killCount, createdAt: now },
+    });
+    await recordAttendance(event.id, playerName, "kill", now);
+    // Raid party members count as attending even if they don't run the
+    // events webhook themselves.
+    for (const member of party) await recordAttendance(event.id, member, "party", now);
+  }
+  return matching.length > 0;
 }
