@@ -38,6 +38,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           >
             ← Home
           </Link>
+          <Link
+            href="/events/admin"
+            className="shrink-0 whitespace-nowrap flex items-center gap-1.5 text-sm text-purple-300 hover:text-white border border-purple-800/50 bg-surface/60 hover:border-purple-600/60 hover:bg-raised/60 px-3.5 py-2 rounded-lg font-medium transition-colors"
+          >
+            Events admin →
+          </Link>
           <LogoutButton className="shrink-0 whitespace-nowrap flex items-center gap-1.5 text-sm text-purple-300 hover:text-red-300 border border-purple-800/50 bg-surface/60 hover:border-red-700/50 hover:bg-red-950/30 px-3.5 py-2 rounded-lg font-medium transition-colors" />
         </div>
       </aside>

@@ -181,9 +181,61 @@ model BossItem {
 // ── Events ─────────────────────────────────────────────────────────────────
 
 model Settings {
-  id                String  @id
-  discordWebhookUrl String? // posts an announcement embed here when an event is created
-  generalRules      String? @db.Text // shown on the Rules page, above the per-tile board rules
+  id                 String  @id
+  discordWebhookUrl  String? // posts an announcement embed here when an event is created
+  generalRules       String? @db.Text // shown on the Rules page, above the per-tile board rules
+  eventsWebhookToken String? // token for /api/webhook/events — deliberately separate from BingoBoard.dinkToken so the events link reveals nothing about a bingo board
+}
+
+// ── Clan events (separate from bingo) ──────────────────────────────────────
+// Attendance comes from Dink webhooks: "!join"-style clan chat check-ins (seen
+// by any clan member's Dink, so only an admin needs it set up), plus kill
+// counts/loot from players who've opted in by adding the events webhook.
+
+model ClanEvent {
+  id          String   @id @default(cuid())
+  name        String
+  description String?  @db.Text
+  startsAt    DateTime
+  endsAt      DateTime
+  joinPhrase  String   @default("!join") // clan chat message that checks a player in (case-insensitive exact match)
+  bossFilter  String?  // when set, only kills/loot whose source matches this (case-insensitive) count — null = anything counts
+  createdAt   DateTime @default(now())
+
+  attendees ClanEventAttendee[]
+  activity  ClanEventActivity[]
+}
+
+model ClanEventAttendee {
+  id          String    @id @default(cuid())
+  eventId     String
+  event       ClanEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  rsn         String    // display name as first seen
+  rsnKey      String    // normalized RSN (see normalizeRsn) — dedupe key
+  via         String    // how they were first recorded: "join" | "kill" | "loot" | "party" | "manual"
+  firstSeenAt DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+
+  @@unique([eventId, rsnKey])
+}
+
+model ClanEventActivity {
+  id        String    @id @default(cuid())
+  eventId   String
+  event     ClanEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  rsn       String
+  rsnKey    String
+  type      String    // "KILL" | "LOOT"
+  source    String?   // boss/NPC name
+  killCount Int?      // KILL only — the player's KC after this kill
+  itemId    Int?      // LOOT only
+  itemName  String?
+  quantity  Int?
+  priceEach Int?      // GE price per item at drop time, as reported by Dink
+  imageUrl  String?   // LOOT only — Dink's screenshot (Vercel Blob), shared by every item row from the same notification
+  createdAt DateTime  @default(now())
+
+  @@index([eventId, createdAt])
 }
 
 model Event {

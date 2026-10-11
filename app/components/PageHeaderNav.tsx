@@ -11,9 +11,9 @@ function HomeLink() {
   );
 }
 
-function AdminLink() {
+function AdminLink({ href }: { href: string }) {
   return (
-    <Link href="/bingo/admin" className={linkClass}>
+    <Link href={href} className={linkClass}>
       Admin →
     </Link>
   );
@@ -26,19 +26,25 @@ function AdminLink() {
  * underneath them at narrow widths. From `sm` up they pin to the corners
  * alongside the centered title as before.
  */
-export default function PageHeaderNav({ children }: { children: React.ReactNode }) {
+export default function PageHeaderNav({
+  children,
+  adminHref = "/bingo/admin",
+}: {
+  children: React.ReactNode;
+  adminHref?: string;
+}) {
   return (
     <>
       <div className="flex sm:hidden items-center justify-between mb-4">
         <HomeLink />
-        <AdminLink />
+        <AdminLink href={adminHref} />
       </div>
       <div className="relative">
         <div className="hidden sm:block absolute left-0 top-0">
           <HomeLink />
         </div>
         <div className="hidden sm:block absolute right-0 top-0">
-          <AdminLink />
+          <AdminLink href={adminHref} />
         </div>
         {children}
       </div>

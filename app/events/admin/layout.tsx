@@ -1,0 +1,40 @@
+import { auth } from "@/auth";
+import { redirect } from "next/navigation";
+import Link from "next/link";
+import LogoutButton from "@/app/components/LogoutButton";
+
+const exitLinkCls =
+  "shrink-0 whitespace-nowrap flex items-center gap-1.5 text-sm text-purple-300 hover:text-white border border-purple-800/50 bg-surface/60 hover:border-purple-600/60 hover:bg-raised/60 px-3.5 py-2 rounded-lg font-medium transition-colors";
+
+export default async function EventsAdminLayout({ children }: { children: React.ReactNode }) {
+  const session = await auth();
+  if (!session) redirect("/login");
+  if (session.user.role !== "ADMIN") redirect("/");
+
+  return (
+    <div className="min-h-screen bg-[#080510] text-white flex flex-col md:flex-row" style={{ "--accent": "168 85 247", "--accent-h": "271", "--bg-base": "hsl(271 70% 4%)", "--bg-surface": "hsl(271 70% 7%)", "--bg-raised": "hsl(271 70% 10%)" } as React.CSSProperties}>
+      <aside className="md:w-56 md:shrink-0 bg-[#0a0618] border-b md:border-b-0 md:border-r border-purple-900/40 flex flex-col">
+        <div className="px-4 py-3 md:px-6 md:py-5 border-b border-purple-900/40">
+          <p className="text-[10px] text-purple-600 uppercase tracking-widest mb-1">Admin</p>
+          <p className="font-[family-name:var(--font-cinzel)] font-bold text-purple-300 heading-glow text-sm">
+            Clan Events
+          </p>
+        </div>
+        <nav className="flex flex-row md:flex-col gap-1 p-2 md:p-3 overflow-x-auto md:overflow-visible md:flex-1">
+          <Link
+            href="/events/admin"
+            className="shrink-0 whitespace-nowrap px-3 py-2 rounded-lg text-sm text-purple-400 hover:bg-purple-900/30 hover:text-purple-200 transition-colors"
+          >
+            Events
+          </Link>
+        </nav>
+        <div className="flex flex-row md:flex-col gap-2 p-2 md:p-3 border-t border-purple-900/30 overflow-x-auto md:overflow-visible">
+          <Link href="/events" className={exitLinkCls}>← Public events</Link>
+          <Link href="/bingo/admin" className={exitLinkCls}>Bingo admin</Link>
+          <LogoutButton className="shrink-0 whitespace-nowrap flex items-center gap-1.5 text-sm text-purple-300 hover:text-red-300 border border-purple-800/50 bg-surface/60 hover:border-red-700/50 hover:bg-red-950/30 px-3.5 py-2 rounded-lg font-medium transition-colors" />
+        </div>
+      </aside>
+      <main className="flex-1 min-w-0 p-4 md:p-6 overflow-auto">{children}</main>
+    </div>
+  );
+}

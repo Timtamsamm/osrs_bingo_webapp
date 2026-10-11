@@ -7,6 +7,11 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "**.public.blob.vercel-storage.com",
       },
+      {
+        // OSRS item icons by item ID (events Top drops)
+        protocol: "https",
+        hostname: "static.runelite.net",
+      },
     ],
   },
   async redirects() {
