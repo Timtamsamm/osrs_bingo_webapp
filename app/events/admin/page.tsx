@@ -15,8 +15,9 @@ export default async function EventsAdminPage() {
   const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
   const origin = `${proto}://${host}`;
 
-  const [token, events] = await Promise.all([
+  const [token, bosses, events] = await Promise.all([
     ensureEventsToken(),
+    prisma.boss.findMany({ select: { name: true }, orderBy: { name: "asc" } }),
     prisma.clanEvent.findMany({
       orderBy: { startsAt: "desc" },
       select: { id: true, name: true, startsAt: true, endsAt: true, _count: { select: { attendees: true, activity: true } } },
@@ -66,7 +67,7 @@ export default async function EventsAdminPage() {
 
       <section className="flex flex-col gap-3">
         <h2 className="font-semibold text-purple-100">New event</h2>
-        <EventForm />
+        <EventForm bossNames={bosses.map((b) => b.name)} />
       </section>
     </div>
   );

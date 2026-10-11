@@ -13,13 +13,14 @@ interface Props {
 
 export default async function EventAdminPage({ params }: Props) {
   const { id } = await params;
-  const [event, roster, clanMembers] = await Promise.all([
+  const [event, roster, clanMembers, bosses] = await Promise.all([
     prisma.clanEvent.findUnique({
       where: { id },
       include: { attendees: { orderBy: { firstSeenAt: "asc" } } },
     }),
     getClanRoster(),
     fetchGroupMembers(),
+    prisma.boss.findMany({ select: { name: true }, orderBy: { name: "asc" } }),
   ]);
   if (!event) notFound();
 
@@ -39,6 +40,7 @@ export default async function EventAdminPage({ params }: Props) {
       </div>
 
       <EventForm
+        bossNames={bosses.map((b) => b.name)}
         event={{
           id: event.id,
           name: event.name,

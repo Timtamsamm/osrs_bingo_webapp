@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import BossFilterPicker from "./BossFilterPicker";
 
 export interface EventFormValues {
   id: string;
@@ -22,7 +23,7 @@ const inputCls =
   "bg-[#130a28] border border-purple-900/50 rounded-lg px-3 py-2 text-white text-sm placeholder-purple-800 focus:outline-none focus:ring-2 focus:ring-purple-500/40 focus:border-purple-600/60";
 
 /** Create form when `event` is omitted, edit form (with delete) otherwise. */
-export default function EventForm({ event }: { event?: EventFormValues }) {
+export default function EventForm({ event, bossNames }: { event?: EventFormValues; bossNames: string[] }) {
   const router = useRouter();
   const [name, setName] = useState(event?.name ?? "");
   const [description, setDescription] = useState(event?.description ?? "");
@@ -103,8 +104,12 @@ export default function EventForm({ event }: { event?: EventFormValues }) {
         <Field label="Join phrase" hint="Typed in clan chat to check in. Must match exactly (not case-sensitive).">
           <input value={joinPhrase} onChange={(e) => setJoinPhrase(e.target.value)} placeholder="!join" className={inputCls} />
         </Field>
-        <Field label="Boss filter (optional)" hint="Only count kills/drops from these, comma-separated. Blank = count everything.">
-          <input value={bossFilter} onChange={(e) => setBossFilter(e.target.value)} placeholder="Vorkath" className={inputCls} />
+        <Field
+          as="div"
+          label="Boss filter (optional)"
+          hint="Only kills/drops from these bosses count. Leave empty to count everything. Not listed? Type it and press Enter."
+        >
+          <BossFilterPicker bossNames={bossNames} value={bossFilter} onChange={setBossFilter} inputClassName={inputCls} />
         </Field>
       </div>
       <div className="flex flex-wrap items-center gap-3">
@@ -131,12 +136,23 @@ export default function EventForm({ event }: { event?: EventFormValues }) {
   );
 }
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+function Field({
+  label,
+  hint,
+  children,
+  as: Tag = "label",
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+  // "div" for fields containing several controls (a <label> may only wrap one).
+  as?: "label" | "div";
+}) {
   return (
-    <label className="flex flex-col gap-1.5">
+    <Tag className="flex flex-col gap-1.5">
       <span className="text-xs font-medium text-purple-300">{label}</span>
       {children}
       {hint && <span className="text-[11px] text-purple-600/80">{hint}</span>}
-    </label>
+    </Tag>
   );
 }

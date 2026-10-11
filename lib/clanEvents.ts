@@ -32,14 +32,22 @@ export async function ensureEventsToken(): Promise<string> {
  * Whether a boss/NPC name passes an event's boss filter. The filter is a
  * comma-separated list matched case-insensitively as a substring, so
  * "Chambers of Xeric" also catches "Chambers of Xeric Challenge Mode".
+ * A leading "The" is ignored on both sides.
  * No filter means every source counts.
  */
 export function matchesBossFilter(filter: string | null, source: string | null | undefined): boolean {
-  const terms = (filter ?? "").split(",").map((t) => t.trim().toLowerCase()).filter(Boolean);
+  const terms = (filter ?? "").split(",").map(bossKey).filter(Boolean);
   if (!terms.length) return true;
   if (!source) return false;
-  const s = source.toLowerCase();
+  const s = bossKey(source);
   return terms.some((t) => s.includes(t));
+}
+
+// Boss names in the picker come from the Boss Items database ("The
+// Nightmare", "The Gauntlet"), but Dink often reports them without the
+// article ("Nightmare", "Gauntlet"), so ignore a leading "the" on both sides.
+function bossKey(name: string): string {
+  return name.trim().toLowerCase().replace(/^the\s+/, "");
 }
 
 /**
