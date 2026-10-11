@@ -47,7 +47,6 @@ export default async function EventAdminPage({ params }: Props) {
           description: event.description,
           startsAt: event.startsAt.toISOString(),
           endsAt: event.endsAt.toISOString(),
-          joinPhrase: event.joinPhrase,
           bossFilter: event.bossFilter,
           minDropValue: event.minDropValue,
           clanOnly: event.clanOnly,

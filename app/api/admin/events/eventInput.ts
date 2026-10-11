@@ -4,7 +4,6 @@ export type EventInput = {
   description: string | null;
   startsAt: Date;
   endsAt: Date;
-  joinPhrase: string;
   bossFilter: string | null;
   minDropValue: number;
   clanOnly: boolean;
@@ -19,7 +18,6 @@ export function parseEventInput(body: Record<string, unknown>): EventInput | { e
   if (isNaN(startsAt.getTime()) || isNaN(endsAt.getTime())) return { error: "Start and end times are required" };
   if (endsAt <= startsAt) return { error: "End time must be after start time" };
 
-  const joinPhrase = typeof body.joinPhrase === "string" && body.joinPhrase.trim() ? body.joinPhrase.trim() : "!join";
   const description = typeof body.description === "string" && body.description.trim() ? body.description.trim() : null;
   const bossFilter = typeof body.bossFilter === "string" && body.bossFilter.trim() ? body.bossFilter.trim() : null;
 
@@ -30,5 +28,5 @@ export function parseEventInput(body: Record<string, unknown>): EventInput | { e
   // Missing = on, matching the column default.
   const clanOnly = body.clanOnly !== false;
 
-  return { name, description, startsAt, endsAt, joinPhrase, bossFilter, minDropValue, clanOnly };
+  return { name, description, startsAt, endsAt, bossFilter, minDropValue, clanOnly };
 }

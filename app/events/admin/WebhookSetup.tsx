@@ -3,24 +3,14 @@
 import { useState } from "react";
 import { discordSetupMessage, dinkSettings, eventsWebhookUrl } from "@/lib/eventsDinkSetup";
 
-export default function WebhookSetup({
-  origin,
-  initialToken,
-  joinPhrases,
-}: {
-  origin: string;
-  initialToken: string;
-  /** Join phrases of every event that hasn't ended, for the admin setup. */
-  joinPhrases: string[];
-}) {
+export default function WebhookSetup({ origin, initialToken }: { origin: string; initialToken: string }) {
   const [token, setToken] = useState(initialToken);
   const [copied, setCopied] = useState<string | null>(null);
   const [regenerating, setRegenerating] = useState(false);
 
   const url = eventsWebhookUrl(origin, token);
-  const playerJson = JSON.stringify(dinkSettings(url, null));
-  const adminJson = JSON.stringify(dinkSettings(url, joinPhrases));
-  const discordMessage = discordSetupMessage(url, joinPhrases);
+  const setupJson = JSON.stringify(dinkSettings(url));
+  const discordMessage = discordSetupMessage(url);
 
   async function copy(label: string, text: string) {
     await navigator.clipboard.writeText(text);
@@ -46,38 +36,28 @@ export default function WebhookSetup({
       <div>
         <h2 className="font-semibold text-purple-100 text-sm">Dink setup</h2>
         <p className="text-xs text-purple-500/80 mt-1">
-          One-time and the same for every event. Copy the setup, then type <code className="text-purple-200">::DinkImport</code> in game.
-          It reveals nothing about the bingo board.
+          One-time and the same for every event. Copy the setup, then type <code className="text-purple-200">::DinkImport</code> in game —
+          or players can type <code className="text-purple-200">/events</code> in Discord to get it. It reveals nothing about the bingo board.
         </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         <button onClick={() => copy("discord", discordMessage)} className={primaryBtn}>
           <span className="block">{copied === "discord" ? "Copied!" : "Copy Discord message"}</span>
           <span className="block text-[11px] font-normal text-purple-200/80 mt-0.5">Steps + setup for players — paste in your clan Discord</span>
         </button>
-        <button onClick={() => copy("player", playerJson)} className={secondaryBtn}>
-          <span className="block font-semibold">{copied === "player" ? "Copied!" : "Copy player setup"}</span>
-          <span className="block text-[11px] text-purple-400/80 mt-0.5">Kills &amp; drops</span>
-        </button>
-        <button onClick={() => copy("admin", adminJson)} className={secondaryBtn}>
-          <span className="block font-semibold">{copied === "admin" ? "Copied!" : "Copy admin setup"}</span>
-          <span className="block text-[11px] text-purple-400/80 mt-0.5">
-            Kills &amp; drops + clan chat check-ins ({joinPhrases.join(", ")})
-          </span>
+        <button onClick={() => copy("setup", setupJson)} className={secondaryBtn}>
+          <span className="block font-semibold">{copied === "setup" ? "Copied!" : "Copy setup only"}</span>
+          <span className="block text-[11px] text-purple-400/80 mt-0.5">Just the block to import — same for players and admins</span>
         </button>
       </div>
 
       <ul className="text-xs text-purple-400/80 leading-relaxed list-disc list-inside space-y-0.5">
-        <li>
-          Admins: import the <b>admin setup</b> and be online in clan chat during events — that&apos;s what records{" "}
-          {joinPhrases.join(" / ")} check-ins. Two admins is safer; duplicates are ignored.
-        </li>
+        <li>A player&apos;s first kill or drop during an event checks them in — there&apos;s nothing to type.</li>
         <li>
           Importing replaces a player&apos;s own Dink <b>chat</b> filters (most players don&apos;t use them). Webhook links are added
           alongside existing ones, never replaced.
         </li>
-        <li>If you add an event with a new join phrase, admins need to re-import the admin setup.</li>
       </ul>
 
       <details className="text-xs text-purple-300/90">
@@ -105,17 +85,10 @@ export default function WebhookSetup({
             <li>Paste it in <b>Webhook Overrides → Chat Webhook Override</b>.</li>
             <li>In <b>Custom Chat Messages</b>, tick <b>Enable Chat Notifications</b> and untick <b>Send Image</b>.</li>
             <li>
-              <b>Message Types</b>: <b>Game Engine</b> (admins also <b>Non-Public Chats</b>).
+              <b>Message Types</b>: <b>Game Engine</b> only.
             </li>
             <li>
-              <b>Message Filters</b>, one per line: <code>Your * count is: *</code>, <code>* received a drop: *</code> (admins also{" "}
-              {joinPhrases.map((p, i) => (
-                <span key={p}>
-                  {i > 0 && ", "}
-                  <code>{p}</code>
-                </span>
-              ))}
-              ).
+              <b>Message Filters</b>, one per line: <code>Your * count is: *</code> and <code>* received a drop: *</code>.
             </li>
           </ol>
         </div>

@@ -111,8 +111,8 @@ export default async function EventPage({ params }: Props) {
         )}
 
         <div className="bg-[#0e0820] border border-purple-900/40 rounded-2xl p-4 mb-6 text-sm text-purple-300/90">
-          To check in, type <code className="text-purple-100 bg-purple-900/40 rounded px-1.5 py-0.5">{event.joinPhrase}</code> in
-          clan chat while the event is live.
+          Attendance, kills and drops are recorded automatically by Dink — your first kill or drop checks you in. New here? Type{" "}
+          <code className="text-purple-100 bg-purple-900/40 rounded px-1.5 py-0.5">/events</code> in the clan Discord for the one-time setup.
         </div>
 
         <div className="grid grid-cols-3 gap-3 mb-8">
@@ -183,7 +183,7 @@ export default async function EventPage({ params }: Props) {
                       {d.itemName}
                     </p>
                     <p className="text-[11px] text-purple-500/80 truncate">
-                      {d.rsn}
+                      {findClanMember(roster, d.rsn)?.displayName ?? d.rsn}
                       {d.source ? ` · ${d.source}` : ""}
                     </p>
                   </div>

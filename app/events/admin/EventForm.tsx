@@ -11,7 +11,6 @@ export interface EventFormValues {
   description: string | null;
   startsAt: string;
   endsAt: string;
-  joinPhrase: string;
   bossFilter: string | null;
   minDropValue: number;
   clanOnly: boolean;
@@ -53,7 +52,6 @@ export default function EventForm({ event, bossNames }: { event?: EventFormValue
   const [description, setDescription] = useState(event?.description ?? "");
   const [startsAt, setStartsAt] = useState(event ? toDatetimeLocal(event.startsAt) : "");
   const [endsAt, setEndsAt] = useState(event ? toDatetimeLocal(event.endsAt) : "");
-  const [joinPhrase, setJoinPhrase] = useState(event?.joinPhrase ?? "!join");
   const [bossFilter, setBossFilter] = useState(event?.bossFilter ?? "");
   const [minDrop, setMinDrop] = useState(event?.minDropValue ? formatGpInput(event.minDropValue) : "");
   const [clanOnly, setClanOnly] = useState(event?.clanOnly ?? true);
@@ -84,7 +82,6 @@ export default function EventForm({ event, bossNames }: { event?: EventFormValue
         description,
         startsAt: new Date(startsAt).toISOString(),
         endsAt: new Date(endsAt).toISOString(),
-        joinPhrase,
         bossFilter,
         minDropValue,
         clanOnly,
@@ -138,18 +135,13 @@ export default function EventForm({ event, bossNames }: { event?: EventFormValue
           />
         </Field>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Join phrase" hint="Typed in clan chat to check in. Must match exactly (not case-sensitive).">
-          <input value={joinPhrase} onChange={(e) => setJoinPhrase(e.target.value)} placeholder="!join" className={inputCls} />
-        </Field>
-        <Field
-          as="div"
-          label="Boss filter (optional)"
-          hint="Only kills/drops from these bosses count. Leave empty to count everything. Not listed? Type it and press Enter."
-        >
-          <BossFilterPicker bossNames={bossNames} value={bossFilter} onChange={setBossFilter} inputClassName={inputCls} />
-        </Field>
-      </div>
+      <Field
+        as="div"
+        label="Boss filter (optional)"
+        hint="Only kills/drops from these bosses count. Leave empty to count everything. Not listed? Type it and press Enter."
+      >
+        <BossFilterPicker bossNames={bossNames} value={bossFilter} onChange={setBossFilter} inputClassName={inputCls} />
+      </Field>
       <Field
         label="Minimum drop value (optional)"
         hint="Drops worth less than this (whole stack) are left out of Top drops and loot totals — they still count for attendance. e.g. 50k or 1m. Blank = show every drop."

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import nacl from "tweetnacl";
-import { prisma } from "@/lib/prisma";
-import { activeJoinPhrases, ensureEventsToken } from "@/lib/clanEvents";
+import { ensureEventsToken } from "@/lib/clanEvents";
 import { discordSetupMessage, eventsWebhookUrl } from "@/lib/eventsDinkSetup";
 
 // Discord "Interactions Endpoint URL" for the WongTongsEvent application.
@@ -48,15 +47,11 @@ export async function POST(req: NextRequest) {
   }
 
   if (interaction.type === InteractionType.APPLICATION_COMMAND && interaction.data?.name === "events") {
-    const now = new Date();
-    const [token, events] = await Promise.all([
-      ensureEventsToken(),
-      prisma.clanEvent.findMany({ where: { endsAt: { gte: now } }, select: { joinPhrase: true, endsAt: true } }),
-    ]);
+    const token = await ensureEventsToken();
     // Discord calls the public URL registered as the interactions endpoint,
     // so the request's own origin is the public site players should use.
     const origin = new URL(req.url).origin;
-    const content = discordSetupMessage(eventsWebhookUrl(origin, token), activeJoinPhrases(events, now));
+    const content = discordSetupMessage(eventsWebhookUrl(origin, token));
     return NextResponse.json({ type: ResponseType.CHANNEL_MESSAGE, data: { content, flags: EPHEMERAL } });
   }
 

@@ -11,11 +11,10 @@ import type { Prisma } from "@prisma/client";
 // (/api/webhook/dink), with its own token, so handing this URL out reveals
 // nothing about a bingo board.
 //
-// Three notification types matter:
+// Three notification types matter (a player's first kill/drop during an
+// event also checks them in — there's no separate check-in step):
 // - CHAT, from Dink's chat notifier (players route it here with the Chat
 //   Webhook Override, so their other webhooks aren't flooded):
-//   - the join phrase typed in clan chat — clan chat is cross-world, so one
-//     admin's Dink covers everyone; the sender is extra.source, not playerName
 //   - game lines "Your X kill count is: N." — every kill, without lowering
 //     Dink's global Kill Count Interval
 //   - game lines "X received a drop: Item (Boss)" — drops below the player's
@@ -25,10 +24,11 @@ import type { Prisma } from "@prisma/client";
 // All of it comes from the player's own client, so worlds and instances
 // don't matter.
 
-const CHAT_TYPES = new Set(["CLAN_CHAT", "CLAN_GUEST_CHAT", "FRIENDSCHAT"]);
 // Messages typed by players — never trusted as kill/drop lines.
 const PLAYER_CHAT_TYPES = new Set([
-  ...CHAT_TYPES,
+  "CLAN_CHAT",
+  "CLAN_GUEST_CHAT",
+  "FRIENDSCHAT",
   "CLAN_GIM_CHAT",
   "PUBLICCHAT",
   "PRIVATECHAT",
@@ -138,7 +138,7 @@ export async function POST(req: NextRequest) {
   const now = new Date();
   const liveEvents = await prisma.clanEvent.findMany({
     where: { startsAt: { lte: now }, endsAt: { gte: now } },
-    select: { id: true, joinPhrase: true, bossFilter: true },
+    select: { id: true, bossFilter: true },
   });
   if (!liveEvents.length) return NextResponse.json({ status: "no_live_event" });
 
@@ -160,20 +160,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ status: recorded ? "recorded" : "ignored" });
       }
     }
-
-    const sender = extra.source as string | undefined;
-    const message = (extra.message as string | undefined)?.trim().toLowerCase();
-    if (!chatType || !CHAT_TYPES.has(chatType) || !sender || !message) {
-      return NextResponse.json({ status: "ignored" });
-    }
-    let joined = 0;
-    for (const event of liveEvents) {
-      if (message === event.joinPhrase.trim().toLowerCase()) {
-        await recordAttendance(event.id, sender, "join", now);
-        joined++;
-      }
-    }
-    return NextResponse.json({ status: joined ? "joined" : "ignored" });
+    return NextResponse.json({ status: "ignored" });
   }
 
   if (!playerName) return NextResponse.json({ status: "ignored" });

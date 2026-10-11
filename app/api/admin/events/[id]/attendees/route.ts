@@ -9,8 +9,8 @@ async function requireAdmin() {
   return session;
 }
 
-// Manual add — for anyone the automatic check-in missed (e.g. no admin's
-// Dink was online when they typed the join phrase).
+// Manual add — for anyone attendance missed (e.g. a player without the Dink
+// setup, or at an event with no kills).
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!await requireAdmin()) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 

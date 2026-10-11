@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { activeJoinPhrases, ensureEventsToken, eventStatus } from "@/lib/clanEvents";
+import { ensureEventsToken, eventStatus } from "@/lib/clanEvents";
 import LocalTime from "@/app/components/LocalTime";
 import StatusBadge from "../StatusBadge";
 import WebhookSetup from "./WebhookSetup";
@@ -20,11 +20,10 @@ export default async function EventsAdminPage() {
     prisma.boss.findMany({ select: { name: true }, orderBy: { name: "asc" } }),
     prisma.clanEvent.findMany({
       orderBy: { startsAt: "desc" },
-      select: { id: true, name: true, startsAt: true, endsAt: true, joinPhrase: true, _count: { select: { attendees: true, activity: true } } },
+      select: { id: true, name: true, startsAt: true, endsAt: true, _count: { select: { attendees: true, activity: true } } },
     }),
   ]);
 
-  const joinPhrases = activeJoinPhrases(events);
 
   return (
     <div className="flex flex-col gap-8 max-w-3xl w-full mx-auto">
@@ -37,7 +36,7 @@ export default async function EventsAdminPage() {
         </p>
       </div>
 
-      <WebhookSetup origin={origin} initialToken={token} joinPhrases={joinPhrases} />
+      <WebhookSetup origin={origin} initialToken={token} />
 
       <section className="flex flex-col gap-3">
         <h2 className="font-semibold text-purple-100">Events</h2>

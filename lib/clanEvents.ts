@@ -5,10 +5,9 @@ import { getSettings, updateSettings } from "@/lib/settings";
 import { normalizeRsn } from "@/lib/scoring";
 import { fetchGroupMembers, type WomMember } from "@/lib/wiseoldman";
 
-export type AttendanceVia = "join" | "kill" | "loot" | "party" | "manual";
+export type AttendanceVia = "kill" | "loot" | "party" | "manual";
 
 export const VIA_LABELS: Record<string, string> = {
-  join: "Checked in",
   kill: "Kill",
   loot: "Drop",
   party: "Raid party",
@@ -52,9 +51,9 @@ function bossKey(name: string): string {
 
 /**
  * Records a player as attending (or bumps lastSeenAt if they already are).
- * Several clan members' Dink clients report the same "!join" message at
- * once, so concurrent creates for the same player are expected — the losing
- * insert hits the unique constraint and falls back to an update.
+ * Reports can arrive concurrently (e.g. a kill's chat line and Dink's Loot
+ * notification), so two creates for the same player are expected — the
+ * losing insert hits the unique constraint and falls back to an update.
  */
 export async function recordAttendance(eventId: string, rsn: string, via: AttendanceVia, at = new Date()): Promise<void> {
   const rsnKey = normalizeRsn(rsn);
@@ -135,20 +134,6 @@ export function formatGp(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}m`;
   if (value >= 1_000) return `${Math.round(value / 1_000)}k`;
   return value.toLocaleString();
-}
-
-/**
- * Every join phrase still in use (events that haven't ended), always
- * including the default "!join" — what admins' Dink needs to match.
- * Case-insensitive dedupe, keeping the first spelling seen.
- */
-export function activeJoinPhrases(events: Array<{ joinPhrase: string; endsAt: Date }>, now = new Date()): string[] {
-  const phrases = new Map<string, string>([["!join", "!join"]]);
-  for (const e of events) {
-    const key = e.joinPhrase.toLowerCase();
-    if (e.endsAt >= now && !phrases.has(key)) phrases.set(key, e.joinPhrase);
-  }
-  return [...phrases.values()];
 }
 
 export type EventStatus = "upcoming" | "live" | "ended";

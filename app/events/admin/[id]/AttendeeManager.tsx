@@ -60,7 +60,7 @@ export default function AttendeeManager({
       <div>
         <h2 className="font-semibold text-purple-100 text-sm">Attendance ({attendees.length})</h2>
         <p className="text-xs text-purple-500/80 mt-1">
-          Filled in automatically. Add anyone the check-in missed, or remove anyone who shouldn&apos;t count.
+          Filled in automatically from each player&apos;s first kill or drop. Add anyone it missed, or remove anyone who shouldn&apos;t count.
         </p>
       </div>
 
