@@ -4,19 +4,65 @@ import { prisma } from "@/lib/prisma";
 import { getSettings } from "@/lib/settings";
 import { normalizeRsn } from "@/lib/scoring";
 import { matchesBossFilter, recordAttendance } from "@/lib/clanEvents";
+import { lookupItem } from "@/lib/osrsItems";
+import type { Prisma } from "@prisma/client";
 
 // Dink webhook for clan events — completely separate from the bingo webhook
 // (/api/webhook/dink), with its own token, so handing this URL out reveals
 // nothing about a bingo board.
 //
 // Three notification types matter:
-// - CHAT: an admin's Dink, with the chat notifier matching the join phrase,
-//   reports every clan member who types it. Clan chat is cross-world, so one
-//   admin covers everyone — the sender is extra.source, not playerName.
-// - KILL_COUNT / LOOT: sent by players who've opted in to drop/KC tracking.
-//   They report from their own client, so worlds and instances don't matter.
+// - CHAT, from Dink's chat notifier (players route it here with the Chat
+//   Webhook Override, so their other webhooks aren't flooded):
+//   - the join phrase typed in clan chat — clan chat is cross-world, so one
+//     admin's Dink covers everyone; the sender is extra.source, not playerName
+//   - game lines "Your X kill count is: N." — every kill, without lowering
+//     Dink's global Kill Count Interval
+//   - game lines "X received a drop: Item (Boss)" — drops below the player's
+//     Dink Min Loot value
+// - KILL_COUNT / LOOT: Dink's own notifiers, from players who've added the
+//   events link. Reports of the same kill/drop arriving both ways are merged.
+// All of it comes from the player's own client, so worlds and instances
+// don't matter.
 
 const CHAT_TYPES = new Set(["CLAN_CHAT", "CLAN_GUEST_CHAT", "FRIENDSCHAT"]);
+// Messages typed by players — never trusted as kill/drop lines.
+const PLAYER_CHAT_TYPES = new Set([
+  ...CHAT_TYPES,
+  "CLAN_GIM_CHAT",
+  "PUBLICCHAT",
+  "PRIVATECHAT",
+  "PRIVATECHATOUT",
+  "MODCHAT",
+  "MODPRIVATECHAT",
+  "AUTOTYPER",
+  "MODAUTOTYPER",
+]);
+
+// "Sausage Samy received a drop: Adamant longsword (Giant Mole)." — also
+// accepts "300 x Rune arrow" quantities and a "(1,234 coins)" value instead
+// of a source.
+const DROP_LINE = /^(.+?) received a drop: (?:([\d,]+) x )?(.+?)(?: \(([^()]+)\))?\.?$/;
+
+type ChatDrop = { player: string; itemName: string; quantity: number; source: string | null; totalValue: number | null };
+
+function parseDropMessage(message: string): ChatDrop | null {
+  const m = DROP_LINE.exec(message.trim());
+  if (!m) return null;
+  const paren = m[4]?.trim() ?? null;
+  const coins = paren ? /^([\d,]+) coins?$/i.exec(paren) : null;
+  return {
+    player: m[1].trim(),
+    itemName: m[3].trim(),
+    quantity: m[2] ? parseInt(m[2].replace(/,/g, ""), 10) : 1,
+    source: coins ? null : paren,
+    totalValue: coins ? parseInt(coins[1].replace(/,/g, ""), 10) : null,
+  };
+}
+
+// How long two reports of the same item for the same player are treated as
+// one drop (chat line + Dink Loot notification arrive seconds apart).
+const DROP_MERGE_WINDOW_MS = 2 * 60 * 1000;
 
 // The game's own kill count messages, e.g. "Your Giant Mole kill count is: 37."
 // Same patterns Dink's KillCountNotifier uses. Players can forward these via
@@ -98,11 +144,21 @@ export async function POST(req: NextRequest) {
 
   if (type === "CHAT") {
     const chatType = extra.type as string | undefined;
-    if (chatType === "GAMEMESSAGE" && playerName) {
-      const kc = parseKillCountMessage((extra.message as string | undefined) ?? "");
-      if (!kc) return NextResponse.json({ status: "ignored" });
-      const recorded = await recordKill(liveEvents, playerName, kc.boss, kc.count, [], now);
-      return NextResponse.json({ status: recorded ? "recorded" : "ignored" });
+    const rawMessage = (extra.message as string | undefined) ?? "";
+
+    // Lines the game/client prints (not typed by a player — otherwise anyone
+    // could type "Bob received a drop: Twisted bow (Vorkath)" in clan chat).
+    if (chatType && !PLAYER_CHAT_TYPES.has(chatType)) {
+      const drop = parseDropMessage(rawMessage);
+      if (drop) {
+        const recorded = await recordChatDrop(liveEvents, drop, now);
+        return NextResponse.json({ status: recorded ? "recorded" : "ignored" });
+      }
+      const kc = playerName ? parseKillCountMessage(rawMessage) : null;
+      if (kc && playerName) {
+        const recorded = await recordKill(liveEvents, playerName, kc.boss, kc.count, [], now);
+        return NextResponse.json({ status: recorded ? "recorded" : "ignored" });
+      }
     }
 
     const sender = extra.source as string | undefined;
@@ -155,21 +211,30 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  const rsnKey = normalizeRsn(playerName);
   for (const event of matching) {
-    await prisma.clanEventActivity.createMany({
-      data: items.map((item) => ({
-        eventId: event.id,
-        rsn: playerName,
-        rsnKey: normalizeRsn(playerName),
-        type: "LOOT",
-        source: source ?? null,
-        itemId: item.id as number,
-        itemName: item.name as string,
-        quantity: toInt(item.quantity) ?? 1,
-        priceEach: toInt(item.priceEach),
-        imageUrl,
-        createdAt: now,
-      })),
+    await withPlayerLock(event.id, rsnKey, async (tx) => {
+      for (const item of items) {
+        const data = {
+          rsn: playerName,
+          source: source ?? null,
+          itemId: item.id as number,
+          itemName: item.name as string,
+          quantity: toInt(item.quantity) ?? 1,
+          priceEach: toInt(item.priceEach),
+          imageUrl,
+          origin: "dink",
+        };
+        // The same drop may already be in from a forwarded chat line — Dink's
+        // version is better (exact ID/price, screenshot), so upgrade that row
+        // instead of adding a second one.
+        const fromChat = await findRecentDrop(tx, event.id, rsnKey, data.itemName, now, "chat");
+        if (fromChat) {
+          await tx.clanEventActivity.update({ where: { id: fromChat.id }, data });
+        } else {
+          await tx.clanEventActivity.create({ data: { ...data, eventId: event.id, rsnKey, type: "LOOT", createdAt: now } });
+        }
+      }
     });
     await recordAttendance(event.id, playerName, "loot", now);
     for (const member of party) await recordAttendance(event.id, member, "party", now);
@@ -195,26 +260,112 @@ async function recordKill(
   const rsnKey = normalizeRsn(playerName);
   const matching = liveEvents.filter((e) => matchesBossFilter(e.bossFilter, boss));
   for (const event of matching) {
-    if (killCount != null) {
-      const duplicate = await prisma.clanEventActivity.findFirst({
-        where: {
-          eventId: event.id,
-          rsnKey,
-          type: "KILL",
-          killCount,
-          source: { equals: boss ?? "", mode: "insensitive" },
-        },
-        select: { id: true },
+    // Both reports of one kill arrive within moments of each other, so the
+    // check-then-insert has to be serialized per player.
+    const created = await withPlayerLock(event.id, rsnKey, async (tx) => {
+      if (killCount != null) {
+        const duplicate = await tx.clanEventActivity.findFirst({
+          where: {
+            eventId: event.id,
+            rsnKey,
+            type: "KILL",
+            killCount,
+            source: { equals: boss ?? "", mode: "insensitive" },
+          },
+          select: { id: true },
+        });
+        if (duplicate) return false;
+      }
+      await tx.clanEventActivity.create({
+        data: { eventId: event.id, rsn: playerName, rsnKey, type: "KILL", source: boss ?? null, killCount, createdAt: now },
       });
-      if (duplicate) continue;
-    }
-    await prisma.clanEventActivity.create({
-      data: { eventId: event.id, rsn: playerName, rsnKey, type: "KILL", source: boss ?? null, killCount, createdAt: now },
+      return true;
     });
+    if (!created) continue;
     await recordAttendance(event.id, playerName, "kill", now);
     // Raid party members count as attending even if they don't run the
     // events webhook themselves.
     for (const member of party) await recordAttendance(event.id, member, "party", now);
   }
   return matching.length > 0;
+}
+
+/**
+ * Records a drop from a forwarded chat line. These carry only the item's
+ * name, so its ID (for the icon) and price come from the wiki prices API.
+ * Skipped if the same player already has that item recorded moments ago —
+ * from Dink's Loot notifier, or from another clan member's Dink forwarding
+ * the same line.
+ */
+async function recordChatDrop(
+  liveEvents: Array<{ id: string; bossFilter: string | null }>,
+  drop: ChatDrop,
+  now: Date
+): Promise<boolean> {
+  // Without a source (the "(N coins)" form) there's no way to check a boss
+  // filter, so such lines only count for events that track every boss.
+  const matching = liveEvents.filter((e) => matchesBossFilter(e.bossFilter, drop.source));
+  if (!matching.length) return false;
+
+  const item = await lookupItem(drop.itemName);
+  const priceEach = drop.totalValue != null ? Math.round(drop.totalValue / drop.quantity) : item.price;
+  const rsnKey = normalizeRsn(drop.player);
+
+  for (const event of matching) {
+    const created = await withPlayerLock(event.id, rsnKey, async (tx) => {
+      if (await findRecentDrop(tx, event.id, rsnKey, drop.itemName, now)) return false;
+      await tx.clanEventActivity.create({
+        data: {
+          eventId: event.id,
+          rsn: drop.player,
+          rsnKey,
+          type: "LOOT",
+          source: drop.source,
+          itemId: item.id,
+          itemName: drop.itemName,
+          quantity: drop.quantity,
+          priceEach: toInt(priceEach),
+          origin: "chat",
+          createdAt: now,
+        },
+      });
+      return true;
+    });
+    if (created) await recordAttendance(event.id, drop.player, "loot", now);
+  }
+  return true;
+}
+
+function findRecentDrop(
+  tx: Prisma.TransactionClient,
+  eventId: string,
+  rsnKey: string,
+  itemName: string,
+  now: Date,
+  origin?: "dink" | "chat"
+) {
+  return tx.clanEventActivity.findFirst({
+    where: {
+      eventId,
+      rsnKey,
+      type: "LOOT",
+      itemName: { equals: itemName, mode: "insensitive" },
+      createdAt: { gte: new Date(now.getTime() - DROP_MERGE_WINDOW_MS) },
+      ...(origin ? { origin } : {}),
+    },
+    orderBy: { createdAt: "desc" },
+    select: { id: true },
+  });
+}
+
+/**
+ * Runs `fn` in a transaction holding a Postgres advisory lock for this
+ * player in this event, so concurrent reports of the same kill/drop can't
+ * both pass a "not recorded yet" check.
+ */
+function withPlayerLock<T>(eventId: string, rsnKey: string, fn: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${eventId}:${rsnKey}`}))`;
+    return fn(tx);
+  });
 }

@@ -233,6 +233,7 @@ model ClanEventActivity {
   quantity  Int?
   priceEach Int?      // GE price per item at drop time, as reported by Dink
   imageUrl  String?   // LOOT only — Dink's screenshot (Vercel Blob), shared by every item row from the same notification
+  origin    String    @default("dink") // LOOT only — "dink" (Dink's Loot notifier) | "chat" (a forwarded "X received a drop: Y (Boss)" chat message); used to merge two reports of one drop
   createdAt DateTime  @default(now())
 
   @@index([eventId, createdAt])

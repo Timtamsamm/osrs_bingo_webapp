@@ -70,8 +70,9 @@ export default function WebhookSetup({ origin, initialToken }: { origin: string;
             <li>
               <b>Kills:</b> paste the link in <b>Webhook Overrides → Chat Webhook Override</b>. In <b>Custom Chat Messages</b>, tick{" "}
               <b>Enable Chat Notifications</b>, keep <b>Game Engine</b> selected in <b>Message Types</b>, and add{" "}
-              <code>Your * count is: *</code> to <b>Message Filters</b>. Every kill is sent only to this site — your Kill Count Interval and
-              other webhooks are untouched.
+              <code>Your * count is: *</code> and <code>* received a drop: *</code> to <b>Message Filters</b> (one per line). Every
+              kill — and drops too cheap for your Loot settings — is sent only to this site; your Kill Count Interval and other
+              webhooks are untouched.
             </li>
             <li>
               <b>Drops:</b> paste the link on a new line in <b>Primary Webhook URLs</b> (existing lines keep working) and tick{" "}
