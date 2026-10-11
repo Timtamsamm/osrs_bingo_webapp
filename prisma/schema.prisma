@@ -227,7 +227,7 @@ model ClanEventActivity {
   event     ClanEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
   rsn       String
   rsnKey    String
-  type      String    // "KILL" | "LOOT"
+  type      String    // "KILL" | "LOOT" | "TIME" (a kill time line, matched to the player's nearest KILL row when displayed)
   source    String?   // boss/NPC name
   killCount Int?      // KILL only — the player's KC after this kill
   itemId    Int?      // LOOT only
@@ -235,6 +235,9 @@ model ClanEventActivity {
   quantity  Int?
   priceEach Int?      // GE price per item at drop time, as reported by Dink
   imageUrl  String?   // LOOT only — Dink's screenshot (Vercel Blob), shared by every item row from the same notification
+  durationMs Int?     // KILL: time from Dink's KILL_COUNT notification; TIME: the parsed time line
+  isPb      Boolean   @default(false) // KILL/TIME: the game flagged this time as a new personal best
+  party     Json?     // KILL: raid team (RSNs, excluding the reporter) from Dink — they share the team's time
   origin    String    @default("dink") // LOOT only — "dink" (Dink's Loot notifier) | "chat" (a forwarded "X received a drop: Y (Boss)" chat message); used to merge two reports of one drop
   createdAt DateTime  @default(now())
 

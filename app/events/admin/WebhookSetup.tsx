@@ -88,7 +88,8 @@ export default function WebhookSetup({ origin, initialToken }: { origin: string;
               <b>Message Types</b>: <b>Game Engine</b> only.
             </li>
             <li>
-              <b>Message Filters</b>, one per line: <code>Your * count is: *</code> and <code>* received a drop: *</code>.
+              <b>Message Filters</b>, one per line: <code>Your * count is: *</code>, <code>* received a drop: *</code>,{" "}
+              <code>*duration: *</code> and <code>*completion time: *</code> (kill times).
             </li>
           </ol>
         </div>

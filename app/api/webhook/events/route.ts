@@ -5,6 +5,7 @@ import { getSettings } from "@/lib/settings";
 import { normalizeRsn } from "@/lib/scoring";
 import { matchesBossFilter, recordAttendance } from "@/lib/clanEvents";
 import { lookupItem } from "@/lib/osrsItems";
+import { parseIsoDuration, parseTimeLine } from "@/lib/killTimes";
 import type { Prisma } from "@prisma/client";
 
 // Dink webhook for clan events — completely separate from the bingo webhook
@@ -38,6 +39,9 @@ const PLAYER_CHAT_TYPES = new Set([
   "AUTOTYPER",
   "MODAUTOTYPER",
 ]);
+// Clan broadcasts are about other members ("X received a drop: …", PBs) and
+// aren't part of the event tracking — only a player's own game lines are.
+const BROADCAST_TYPES = new Set(["CLAN_MESSAGE", "CLAN_GUEST_MESSAGE", "CLAN_GIM_MESSAGE"]);
 
 // "Sausage Samy received a drop: Adamant longsword (Giant Mole)." — also
 // accepts "300 x Rune arrow" quantities and a "(1,234 coins)" value instead
@@ -148,7 +152,7 @@ export async function POST(req: NextRequest) {
 
     // Lines the game/client prints (not typed by a player — otherwise anyone
     // could type "Bob received a drop: Twisted bow (Vorkath)" in clan chat).
-    if (chatType && !PLAYER_CHAT_TYPES.has(chatType)) {
+    if (chatType && !PLAYER_CHAT_TYPES.has(chatType) && !BROADCAST_TYPES.has(chatType)) {
       const drop = parseDropMessage(rawMessage);
       if (drop) {
         const recorded = await recordChatDrop(liveEvents, drop, now);
@@ -156,8 +160,26 @@ export async function POST(req: NextRequest) {
       }
       const kc = playerName ? parseKillCountMessage(rawMessage) : null;
       if (kc && playerName) {
-        const recorded = await recordKill(liveEvents, playerName, kc.boss, kc.count, [], now);
+        const recorded = await recordKill(liveEvents, playerName, kc.boss, kc.count, [], { durationMs: null, isPb: false }, now);
         return NextResponse.json({ status: recorded ? "recorded" : "ignored" });
+      }
+      // "Fight duration: 1:23.40", raid completion times… The line doesn't name
+      // the boss, so it's stored as-is in every live event and matched to the
+      // player's nearest kill when the event page is built (see lib/killTimes).
+      const time = playerName ? parseTimeLine(rawMessage) : null;
+      if (time && playerName) {
+        await prisma.clanEventActivity.createMany({
+          data: liveEvents.map((e) => ({
+            eventId: e.id,
+            rsn: playerName,
+            rsnKey: normalizeRsn(playerName),
+            type: "TIME",
+            durationMs: time.ms,
+            isPb: time.isPb,
+            createdAt: now,
+          })),
+        });
+        return NextResponse.json({ status: "recorded" });
       }
     }
     return NextResponse.json({ status: "ignored" });
@@ -170,7 +192,8 @@ export async function POST(req: NextRequest) {
     : [];
 
   if (type === "KILL_COUNT") {
-    const recorded = await recordKill(liveEvents, playerName, extra.boss as string | undefined, toInt(extra.count), party, now);
+    const timing = { durationMs: parseIsoDuration(extra.time), isPb: extra.isPersonalBest === true };
+    const recorded = await recordKill(liveEvents, playerName, extra.boss as string | undefined, toInt(extra.count), party, timing, now);
     return NextResponse.json({ status: recorded ? "recorded" : "ignored" });
   }
 
@@ -242,9 +265,16 @@ async function recordKill(
   boss: string | undefined,
   killCount: number | null,
   party: string[],
+  timing: { durationMs: number | null; isPb: boolean },
   now: Date
 ): Promise<boolean> {
   const rsnKey = normalizeRsn(playerName);
+  // Raid teammates share the team's time (see lib/killTimes fastestKills).
+  const timeData = {
+    durationMs: timing.durationMs,
+    isPb: timing.isPb,
+    party: party.length ? party : undefined,
+  };
   const matching = liveEvents.filter((e) => matchesBossFilter(e.bossFilter, boss));
   for (const event of matching) {
     // Both reports of one kill arrive within moments of each other, so the
@@ -259,16 +289,26 @@ async function recordKill(
             killCount,
             source: { equals: boss ?? "", mode: "insensitive" },
           },
-          select: { id: true },
+          select: { id: true, durationMs: true },
         });
-        if (duplicate) return false;
+        if (duplicate) {
+          // The chat line got here first; Dink's own notification adds the
+          // kill time and raid team it carries.
+          if (timing.durationMs != null && duplicate.durationMs == null) {
+            await tx.clanEventActivity.update({ where: { id: duplicate.id }, data: timeData });
+          }
+          return false;
+        }
       }
       await tx.clanEventActivity.create({
-        data: { eventId: event.id, rsn: playerName, rsnKey, type: "KILL", source: boss ?? null, killCount, createdAt: now },
+        data: { eventId: event.id, rsn: playerName, rsnKey, type: "KILL", source: boss ?? null, killCount, createdAt: now, ...timeData },
       });
       return true;
     });
-    if (!created) continue;
+    if (!created) {
+      for (const member of party) await recordAttendance(event.id, member, "party", now);
+      continue;
+    }
     await recordAttendance(event.id, playerName, "kill", now);
     // Raid party members count as attending even if they don't run the
     // events webhook themselves.

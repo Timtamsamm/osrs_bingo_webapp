@@ -20,7 +20,7 @@ export default async function EventsAdminPage() {
     prisma.boss.findMany({ select: { name: true }, orderBy: { name: "asc" } }),
     prisma.clanEvent.findMany({
       orderBy: { startsAt: "desc" },
-      select: { id: true, name: true, startsAt: true, endsAt: true, _count: { select: { attendees: true, activity: true } } },
+      select: { id: true, name: true, startsAt: true, endsAt: true, _count: { select: { attendees: true, activity: { where: { type: { in: ["KILL", "LOOT"] } } } } } },
     }),
   ]);
 

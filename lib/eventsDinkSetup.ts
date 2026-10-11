@@ -25,9 +25,13 @@ export function dinkSettings(url: string): Record<string, unknown> {
     // Dink attaches a screenshot to chat notifications by default — that'd be
     // an upload per kill that the events site just discards.
     chatSendImage: false,
-    // GAME = the game's own lines (kill counts, drops) — never player chat.
+    // GAME = the game's own lines (kill counts, drops, kill times) — never
+    // player chat. Deliberately not "Clan Notifications": CoX prints its
+    // completion time there, but so does every clan drop broadcast, which
+    // every player would then forward. CoX times still arrive via Dink's own
+    // KILL_COUNT notifications (always sent on a new personal best).
     chatMessageTypes: ["GAME"],
-    chatPatterns: ["Your * count is: *", "* received a drop: *"].join("\n"),
+    chatPatterns: ["Your * count is: *", "* received a drop: *", "*duration: *", "*completion time: *"].join("\n"),
   };
 }
 

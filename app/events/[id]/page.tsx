@@ -9,6 +9,7 @@ import LocalTime from "@/app/components/LocalTime";
 import { eventStatus, findClanMember, formatGp, formatClanRole, getClanRoster, splitByRoster, VIA_LABELS } from "@/lib/clanEvents";
 import StatusBadge from "../StatusBadge";
 import ZoomableThumbnail from "@/app/components/ZoomableThumbnail";
+import { fastestKills, formatDuration } from "@/lib/killTimes";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -37,8 +38,18 @@ export default async function EventPage({ params }: Props) {
   // "Clan members only" also drops guests' kills/drops (only possible when the
   // WOM roster loaded — otherwise everyone counts rather than no one).
   const hideGuests = event.clanOnly && roster != null;
+  const isShown = (rsn: string) => !hideGuests || findClanMember(roster, rsn) != null;
+  // TIME rows are kill-time lines, only used for Fastest kills below.
   const activity = event.activity.filter(
-    (a) => (a.type === "KILL" || stackValue(a) >= event.minDropValue) && (!hideGuests || findClanMember(roster, a.rsn) != null)
+    (a) => (a.type === "KILL" || (a.type === "LOOT" && stackValue(a) >= event.minDropValue)) && isShown(a.rsn)
+  );
+
+  // Raid teammates share the team's time; with "Clan members only" on, guests
+  // are left out of the names (and a time with no clan member on it is dropped).
+  const fastest = fastestKills(
+    activity.filter((a) => a.type === "KILL"),
+    event.activity.filter((a) => a.type === "TIME"),
+    (rsn) => (isShown(rsn) ? (findClanMember(roster, rsn)?.displayName ?? rsn) : null)
   );
 
   // Per-player totals, keyed by normalized RSN so they line up with attendees.
@@ -152,6 +163,31 @@ export default async function EventPage({ params }: Props) {
             </div>
           )}
         </section>
+
+        {fastest.length > 0 && (
+          <section className="mb-8">
+            <h2 className="font-[family-name:var(--font-cinzel)] text-xl font-bold text-white heading-glow mb-3">Fastest kills</h2>
+            <div className="bg-[#0e0820] border border-purple-900/40 rounded-2xl divide-y divide-purple-900/20">
+              {fastest.map((f) => (
+                <div key={f.boss} className="px-4 py-2.5 flex items-center gap-3 text-sm">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-purple-100 truncate">{f.boss}</p>
+                    <p className="text-[11px] text-purple-500/80 truncate">
+                      {f.players.join(", ")}
+                      {f.killCount != null ? ` · KC ${f.killCount.toLocaleString()}` : ""}
+                    </p>
+                  </div>
+                  {f.isPb && (
+                    <span className="text-[10px] uppercase tracking-wider font-semibold border rounded-full px-2 py-0.5 shrink-0 bg-amber-500/10 text-amber-300 border-amber-500/40">
+                      PB
+                    </span>
+                  )}
+                  <p className="text-purple-100 font-semibold tabular-nums shrink-0">{formatDuration(f.ms)}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {topDrops.length > 0 && (
           <section>
