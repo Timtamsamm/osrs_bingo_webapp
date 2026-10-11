@@ -31,17 +31,22 @@ export default async function EventPage({ params }: Props) {
 
   const status = eventStatus(event);
 
+  // Drops below the event's minimum value are left out of every loot figure
+  // (they're still stored, and already counted for attendance when they came in).
+  const stackValue = (a: { priceEach: number | null; quantity: number | null }) => (a.priceEach ?? 0) * (a.quantity ?? 1);
+  const activity = event.activity.filter((a) => a.type === "KILL" || stackValue(a) >= event.minDropValue);
+
   // Per-player totals, keyed by normalized RSN so they line up with attendees.
   const totals = new Map<string, { kills: number; drops: number; value: number }>();
   let totalKills = 0;
   let totalValue = 0;
-  for (const a of event.activity) {
+  for (const a of activity) {
     const t = totals.get(a.rsnKey) ?? { kills: 0, drops: 0, value: 0 };
     if (a.type === "KILL") {
       t.kills++;
       totalKills++;
     } else {
-      const value = (a.priceEach ?? 0) * (a.quantity ?? 1);
+      const value = stackValue(a);
       t.drops++;
       t.value += value;
       totalValue += value;
@@ -49,10 +54,10 @@ export default async function EventPage({ params }: Props) {
     totals.set(a.rsnKey, t);
   }
 
-  const hasActivity = event.activity.length > 0;
-  const drops = event.activity
+  const hasActivity = activity.length > 0;
+  const drops = activity
     .filter((a) => a.type === "LOOT")
-    .map((a) => ({ ...a, value: (a.priceEach ?? 0) * (a.quantity ?? 1) }));
+    .map((a) => ({ ...a, value: stackValue(a) }));
   const topDrops = [...drops].sort((a, b) => b.value - a.value).slice(0, 15);
 
   const rankedPlayers = event.attendees
@@ -143,7 +148,12 @@ export default async function EventPage({ params }: Props) {
 
         {topDrops.length > 0 && (
           <section>
-            <h2 className="font-[family-name:var(--font-cinzel)] text-xl font-bold text-white heading-glow mb-3">Top drops</h2>
+            <div className="flex items-baseline justify-between gap-3 mb-3">
+              <h2 className="font-[family-name:var(--font-cinzel)] text-xl font-bold text-white heading-glow">Top drops</h2>
+              {event.minDropValue > 0 && (
+                <p className="text-xs text-purple-500/80">Drops worth {formatGp(event.minDropValue)}+</p>
+              )}
+            </div>
             <div className="bg-[#0e0820] border border-purple-900/40 rounded-2xl divide-y divide-purple-900/20">
               {topDrops.map((d) => (
                 <div key={d.id} className="px-4 py-2.5 flex items-center gap-3 text-sm">

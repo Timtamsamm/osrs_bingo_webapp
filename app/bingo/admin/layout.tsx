@@ -10,7 +10,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div className="min-h-screen bg-[#080510] text-white flex flex-col md:flex-row" style={{ "--accent": "168 85 247", "--accent-h": "271", "--bg-base": "hsl(271 70% 4%)", "--bg-surface": "hsl(271 70% 7%)", "--bg-raised": "hsl(271 70% 10%)" } as React.CSSProperties}>
-      <aside className="md:w-56 md:shrink-0 bg-[#0a0618] border-b md:border-b-0 md:border-r border-purple-900/40 flex flex-col">
+      <aside className="md:w-56 md:shrink-0 md:sticky md:top-0 md:h-screen md:overflow-y-auto bg-[#0a0618] border-b md:border-b-0 md:border-r border-purple-900/40 flex flex-col">
         <div className="px-4 py-3 md:px-6 md:py-5 border-b border-purple-900/40">
           <p className="text-[10px] text-purple-600 uppercase tracking-widest mb-1">Admin</p>
           <p className="font-[family-name:var(--font-cinzel)] font-bold text-purple-300 heading-glow text-sm">

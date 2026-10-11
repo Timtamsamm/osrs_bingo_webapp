@@ -6,6 +6,7 @@ export type EventInput = {
   endsAt: Date;
   joinPhrase: string;
   bossFilter: string | null;
+  minDropValue: number;
 };
 
 export function parseEventInput(body: Record<string, unknown>): EventInput | { error: string } {
@@ -21,5 +22,9 @@ export function parseEventInput(body: Record<string, unknown>): EventInput | { e
   const description = typeof body.description === "string" && body.description.trim() ? body.description.trim() : null;
   const bossFilter = typeof body.bossFilter === "string" && body.bossFilter.trim() ? body.bossFilter.trim() : null;
 
-  return { name, description, startsAt, endsAt, joinPhrase, bossFilter };
+  const rawMin = body.minDropValue == null || body.minDropValue === "" ? 0 : Number(body.minDropValue);
+  if (!Number.isFinite(rawMin) || rawMin < 0) return { error: "Minimum drop value must be 0 or more" };
+  const minDropValue = Math.min(Math.round(rawMin), 2_147_483_647);
+
+  return { name, description, startsAt, endsAt, joinPhrase, bossFilter, minDropValue };
 }

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import BossFilterPicker from "./BossFilterPicker";
+import DateTimePicker, { formatDatetimeLocal } from "@/app/components/DateTimePicker";
 
 export interface EventFormValues {
   id: string;
@@ -12,11 +13,33 @@ export interface EventFormValues {
   endsAt: string;
   joinPhrase: string;
   bossFilter: string | null;
+  minDropValue: number;
 }
 
 function toDatetimeLocal(date: string): string {
   const d = new Date(date);
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+
+/** "50k" → 50000, "1.5m" → 1500000, "" → 0; null if it isn't a valid amount. */
+function parseGpInput(input: string): number | null {
+  const m = /^([\d,]*\.?\d+)\s*([kmb])?$/i.exec(input.trim().replace(/gp$/i, "").trim());
+  if (!input.trim()) return 0;
+  if (!m) return null;
+  const mult = { k: 1e3, m: 1e6, b: 1e9 }[(m[2] ?? "").toLowerCase() as "k" | "m" | "b"] ?? 1;
+  return Math.round(parseFloat(m[1].replace(/,/g, "")) * mult);
+}
+
+function formatGpInput(value: number): string {
+  if (value >= 1e6 && value % 1e5 === 0) return `${value / 1e6}m`;
+  if (value >= 1e3 && value % 100 === 0) return `${value / 1e3}k`;
+  return String(value);
+}
+
+/** `start` + `hours`, or null while no start is set (disables the shortcut). */
+function hoursAfter(start: string, hours: number): string | null {
+  if (!start) return null;
+  return formatDatetimeLocal(new Date(new Date(start).getTime() + hours * 3_600_000));
 }
 
 const inputCls =
@@ -31,6 +54,7 @@ export default function EventForm({ event, bossNames }: { event?: EventFormValue
   const [endsAt, setEndsAt] = useState(event ? toDatetimeLocal(event.endsAt) : "");
   const [joinPhrase, setJoinPhrase] = useState(event?.joinPhrase ?? "!join");
   const [bossFilter, setBossFilter] = useState(event?.bossFilter ?? "");
+  const [minDrop, setMinDrop] = useState(event?.minDropValue ? formatGpInput(event.minDropValue) : "");
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
   const [error, setError] = useState("");
@@ -39,6 +63,12 @@ export default function EventForm({ event, bossNames }: { event?: EventFormValue
     e.preventDefault();
     if (!startsAt || !endsAt) {
       setError("Start and end times are required");
+      setStatus("error");
+      return;
+    }
+    const minDropValue = parseGpInput(minDrop);
+    if (minDropValue == null) {
+      setError("Minimum drop value should be a number like 50000, 50k or 1.5m");
       setStatus("error");
       return;
     }
@@ -54,6 +84,7 @@ export default function EventForm({ event, bossNames }: { event?: EventFormValue
         endsAt: new Date(endsAt).toISOString(),
         joinPhrase,
         bossFilter,
+        minDropValue,
       }),
     });
     setSaving(false);
@@ -93,11 +124,15 @@ export default function EventForm({ event, bossNames }: { event?: EventFormValue
         />
       </Field>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Starts">
-          <input type="datetime-local" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} required className={`${inputCls} [color-scheme:dark]`} />
+        <Field as="div" label="Starts">
+          <DateTimePicker value={startsAt} onChange={setStartsAt} />
         </Field>
-        <Field label="Ends">
-          <input type="datetime-local" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} required className={`${inputCls} [color-scheme:dark]`} />
+        <Field as="div" label="Ends">
+          <DateTimePicker
+            value={endsAt}
+            onChange={setEndsAt}
+            shortcuts={[1, 2, 3, 4].map((h) => ({ label: `+${h}h`, value: hoursAfter(startsAt, h) }))}
+          />
         </Field>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
@@ -112,6 +147,18 @@ export default function EventForm({ event, bossNames }: { event?: EventFormValue
           <BossFilterPicker bossNames={bossNames} value={bossFilter} onChange={setBossFilter} inputClassName={inputCls} />
         </Field>
       </div>
+      <Field
+        label="Minimum drop value (optional)"
+        hint="Drops worth less than this (whole stack) are left out of Top drops and loot totals — they still count for attendance. e.g. 50k or 1m. Blank = show every drop."
+      >
+        <input
+          value={minDrop}
+          onChange={(e) => setMinDrop(e.target.value)}
+          placeholder="0"
+          inputMode="decimal"
+          className={`${inputCls} sm:max-w-[calc(50%-0.5rem)]`}
+        />
+      </Field>
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="submit"

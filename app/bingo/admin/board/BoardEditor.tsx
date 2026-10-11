@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import ImageCropper from "@/app/components/ImageCropper";
+import DateTimePicker, { formatDatetimeLocal } from "@/app/components/DateTimePicker";
 import BossItemPickerButton from "./BossItemPicker";
 import { parseItemLines as parseDinkItems, itemLinesToText as dinkItemsToText } from "@/lib/itemListFormat";
 import { parsePreset } from "@/lib/boardPreset";
@@ -260,6 +261,12 @@ export default function BoardEditor({ board }: Props) {
   const [bonusT1, setBonusT1] = useState(board?.rowColBonuses?.t1 ?? 0);
   const [bonusT2, setBonusT2] = useState(board?.rowColBonuses?.t2 ?? 0);
   const [bonusT3, setBonusT3] = useState(board?.rowColBonuses?.t3 ?? 0);
+  // Off = save all bonuses as 0 (the public board then hides its row/column
+  // bonus column entirely). The typed values stay in state, so switching back
+  // on restores them.
+  const [bonusEnabled, setBonusEnabled] = useState(
+    (board?.rowColBonuses?.t1 ?? 0) > 0 || (board?.rowColBonuses?.t2 ?? 0) > 0 || (board?.rowColBonuses?.t3 ?? 0) > 0
+  );
   const [scaleByTeamSize, setScaleByTeamSize] = useState(board?.scaleByTeamSize ?? false);
   // Read only in an effect (not during render) so the server-rendered pass
   // and the client's pre-hydration first render both show "" — matching the
@@ -414,6 +421,7 @@ export default function BoardEditor({ board }: Props) {
       setBonusT1(preset.rowColBonuses.t1);
       setBonusT2(preset.rowColBonuses.t2);
       setBonusT3(preset.rowColBonuses.t3);
+      setBonusEnabled(preset.rowColBonuses.t1 > 0 || preset.rowColBonuses.t2 > 0 || preset.rowColBonuses.t3 > 0);
       setScaleByTeamSize(preset.scaleByTeamSize);
       setSelected(null);
       setImportNote(
@@ -459,7 +467,7 @@ export default function BoardEditor({ board }: Props) {
           endsAt: boardEndsAt ? new Date(boardEndsAt).toISOString() : null,
           size: boardSize,
           dinkToken: boardDinkToken,
-          rowColBonuses: { t1: bonusT1, t2: bonusT2, t3: bonusT3 },
+          rowColBonuses: bonusEnabled ? { t1: bonusT1, t2: bonusT2, t3: bonusT3 } : { t1: 0, t2: 0, t3: 0 },
           scaleByTeamSize,
           tiles: tilesPayload,
         }),
@@ -554,12 +562,21 @@ export default function BoardEditor({ board }: Props) {
 
         {/* Row / Column completion bonus */}
         <div className="flex flex-col gap-1.5 border-t border-purple-900/30 pt-3">
-          <div>
-            <label className={labelCls}>Row &amp; Column Completion Bonus</label>
-            <p className="text-[11px] text-purple-700/60">
-              Awarded when a team completes every tile in a row or column. Bonus tier = lowest-value tier achieved across the line.
-            </p>
-          </div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={bonusEnabled}
+              onChange={(e) => setBonusEnabled(e.target.checked)}
+              className="accent-purple-600"
+            />
+            <span className={labelCls}>Row &amp; Column Completion Bonus</span>
+          </label>
+          <p className="text-[11px] text-purple-700/60">
+            {bonusEnabled
+              ? "Awarded when a team completes every tile in a row or column. Bonus tier = lowest-value tier achieved across the line."
+              : "Off — no bonus for completing a row or column, and the board hides its bonus column."}
+          </p>
+          {bonusEnabled && (
           <div className="flex gap-3">
             <div className="flex flex-col gap-1 flex-1">
               <label className={labelCls}>T1 bonus pts (hardest)</label>
@@ -574,6 +591,7 @@ export default function BoardEditor({ board }: Props) {
               <input type="number" min={0} step={0.5} value={bonusT3} onChange={(e) => setBonusT3(Number(e.target.value))} className={inputCls} />
             </div>
           </div>
+          )}
         </div>
 
         <div className="flex flex-col gap-1 border-t border-purple-900/30 pt-3">
@@ -603,14 +621,31 @@ export default function BoardEditor({ board }: Props) {
           <div className="flex flex-col gap-1 flex-1">
             <label className={labelCls}>Event start (optional)</label>
             <div className="flex gap-2">
-              <input type="datetime-local" value={boardStartsAt} onChange={(e) => setBoardStartsAt(e.target.value)} className={`${inputCls} flex-1 [color-scheme:dark]`} />
+              <div className="flex-1 min-w-0">
+                <DateTimePicker value={boardStartsAt} onChange={setBoardStartsAt} placeholder="Not set" />
+              </div>
               {boardStartsAt && <button type="button" onClick={() => setBoardStartsAt("")} className="text-xs text-purple-600 hover:text-red-400 transition-colors">Clear</button>}
             </div>
           </div>
           <div className="flex flex-col gap-1 flex-1">
             <label className={labelCls}>Event end (optional)</label>
             <div className="flex gap-2">
-              <input type="datetime-local" value={boardEndsAt} onChange={(e) => setBoardEndsAt(e.target.value)} className={`${inputCls} flex-1 [color-scheme:dark]`} />
+              <div className="flex-1 min-w-0">
+                <DateTimePicker
+                  value={boardEndsAt}
+                  onChange={setBoardEndsAt}
+                  placeholder="Not set"
+                  shortcuts={[
+                    { label: "+1 day", days: 1 },
+                    { label: "+3 days", days: 3 },
+                    { label: "+1 week", days: 7 },
+                    { label: "+2 weeks", days: 14 },
+                  ].map((s) => ({
+                    label: s.label,
+                    value: boardStartsAt ? formatDatetimeLocal(new Date(new Date(boardStartsAt).getTime() + s.days * 86_400_000)) : null,
+                  }))}
+                />
+              </div>
               {boardEndsAt && <button type="button" onClick={() => setBoardEndsAt("")} className="text-xs text-purple-600 hover:text-red-400 transition-colors">Clear</button>}
             </div>
           </div>

@@ -20,12 +20,19 @@ export default async function EventsAdminPage() {
     prisma.boss.findMany({ select: { name: true }, orderBy: { name: "asc" } }),
     prisma.clanEvent.findMany({
       orderBy: { startsAt: "desc" },
-      select: { id: true, name: true, startsAt: true, endsAt: true, _count: { select: { attendees: true, activity: true } } },
+      select: { id: true, name: true, startsAt: true, endsAt: true, joinPhrase: true, _count: { select: { attendees: true, activity: true } } },
     }),
   ]);
 
+  // Admins' Dink needs every join phrase still in use (case-insensitive dedupe).
+  const now = new Date();
+  const joinPhrases = new Map<string, string>([["!join", "!join"]]);
+  for (const e of events) {
+    if (e.endsAt >= now) joinPhrases.set(e.joinPhrase.toLowerCase(), e.joinPhrase);
+  }
+
   return (
-    <div className="flex flex-col gap-8 max-w-3xl">
+    <div className="flex flex-col gap-8 max-w-3xl w-full mx-auto">
       <div>
         <h1 className="font-[family-name:var(--font-cinzel)] text-2xl font-bold mb-2 text-purple-100 heading-glow">
           Clan Events
@@ -35,7 +42,7 @@ export default async function EventsAdminPage() {
         </p>
       </div>
 
-      <WebhookSetup origin={origin} initialToken={token} />
+      <WebhookSetup origin={origin} initialToken={token} joinPhrases={[...joinPhrases.values()]} />
 
       <section className="flex flex-col gap-3">
         <h2 className="font-semibold text-purple-100">Events</h2>

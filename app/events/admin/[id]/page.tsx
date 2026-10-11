@@ -25,7 +25,7 @@ export default async function EventAdminPage({ params }: Props) {
   if (!event) notFound();
 
   return (
-    <div className="flex flex-col gap-8 max-w-3xl">
+    <div className="flex flex-col gap-8 max-w-3xl w-full mx-auto">
       <div>
         <Link href="/events/admin" className="text-sm text-purple-400 hover:text-purple-200 transition-colors">
           ← All events
@@ -49,6 +49,7 @@ export default async function EventAdminPage({ params }: Props) {
           endsAt: event.endsAt.toISOString(),
           joinPhrase: event.joinPhrase,
           bossFilter: event.bossFilter,
+          minDropValue: event.minDropValue,
         }}
       />
 
