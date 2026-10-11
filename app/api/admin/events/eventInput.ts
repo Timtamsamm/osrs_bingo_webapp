@@ -7,6 +7,7 @@ export type EventInput = {
   joinPhrase: string;
   bossFilter: string | null;
   minDropValue: number;
+  clanOnly: boolean;
 };
 
 export function parseEventInput(body: Record<string, unknown>): EventInput | { error: string } {
@@ -26,5 +27,8 @@ export function parseEventInput(body: Record<string, unknown>): EventInput | { e
   if (!Number.isFinite(rawMin) || rawMin < 0) return { error: "Minimum drop value must be 0 or more" };
   const minDropValue = Math.min(Math.round(rawMin), 2_147_483_647);
 
-  return { name, description, startsAt, endsAt, joinPhrase, bossFilter, minDropValue };
+  // Missing = on, matching the column default.
+  const clanOnly = body.clanOnly !== false;
+
+  return { name, description, startsAt, endsAt, joinPhrase, bossFilter, minDropValue, clanOnly };
 }

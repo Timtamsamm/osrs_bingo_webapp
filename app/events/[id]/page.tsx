@@ -6,7 +6,7 @@ import Image from "next/image";
 import { prisma } from "@/lib/prisma";
 import PageHeaderNav from "@/app/components/PageHeaderNav";
 import LocalTime from "@/app/components/LocalTime";
-import { eventStatus, formatGp, formatClanRole, getClanRoster, splitByRoster, VIA_LABELS } from "@/lib/clanEvents";
+import { eventStatus, findClanMember, formatGp, formatClanRole, getClanRoster, splitByRoster, VIA_LABELS } from "@/lib/clanEvents";
 import StatusBadge from "../StatusBadge";
 import ZoomableThumbnail from "@/app/components/ZoomableThumbnail";
 
@@ -34,7 +34,12 @@ export default async function EventPage({ params }: Props) {
   // Drops below the event's minimum value are left out of every loot figure
   // (they're still stored, and already counted for attendance when they came in).
   const stackValue = (a: { priceEach: number | null; quantity: number | null }) => (a.priceEach ?? 0) * (a.quantity ?? 1);
-  const activity = event.activity.filter((a) => a.type === "KILL" || stackValue(a) >= event.minDropValue);
+  // "Clan members only" also drops guests' kills/drops (only possible when the
+  // WOM roster loaded — otherwise everyone counts rather than no one).
+  const hideGuests = event.clanOnly && roster != null;
+  const activity = event.activity.filter(
+    (a) => (a.type === "KILL" || stackValue(a) >= event.minDropValue) && (!hideGuests || findClanMember(roster, a.rsn) != null)
+  );
 
   // Per-player totals, keyed by normalized RSN so they line up with attendees.
   const totals = new Map<string, { kills: number; drops: number; value: number }>();
@@ -65,7 +70,9 @@ export default async function EventPage({ params }: Props) {
     .sort((a, b) => b.kills - a.kills || b.value - a.value);
   // Events are for clan members — the main list is WOM group members who
   // checked in or sent data; anyone else is shown separately as a guest.
-  const { members, guests } = splitByRoster(rankedPlayers, roster);
+  const split = splitByRoster(rankedPlayers, roster);
+  const members = split.members;
+  const guests = hideGuests ? [] : split.guests;
 
   return (
     <div className="min-h-screen bg-base text-white">

@@ -17,8 +17,11 @@ export default function AttendeeManager({
   eventId,
   attendees,
   members,
+  guestsHidden,
 }: {
   eventId: string;
+  /** Event is "Clan members only" — guests are recorded but not shown publicly. */
+  guestsHidden: boolean;
   attendees: Attendee[];
   members: MemberOption[];
 }) {
@@ -92,7 +95,7 @@ export default function AttendeeManager({
                   {a.rsn}
                   {a.isGuest && (
                     <span className="ml-2 text-[10px] uppercase tracking-wider text-amber-300/90 border border-amber-500/40 rounded-full px-1.5 py-0.5">
-                      Not in clan
+                      {guestsHidden ? "Not in clan · hidden publicly" : "Not in clan"}
                     </span>
                   )}
                 </p>

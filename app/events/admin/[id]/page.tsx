@@ -50,11 +50,13 @@ export default async function EventAdminPage({ params }: Props) {
           joinPhrase: event.joinPhrase,
           bossFilter: event.bossFilter,
           minDropValue: event.minDropValue,
+          clanOnly: event.clanOnly,
         }}
       />
 
       <AttendeeManager
         eventId={event.id}
+        guestsHidden={event.clanOnly}
         members={clanMembers.map((m) => ({ username: m.username, displayName: m.displayName }))}
         attendees={event.attendees.map((a) => {
           const clan = findClanMember(roster, a.rsn);

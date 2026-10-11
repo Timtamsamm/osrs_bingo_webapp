@@ -200,6 +200,7 @@ model ClanEvent {
   endsAt      DateTime
   joinPhrase  String   @default("!join") // clan chat message that checks a player in (case-insensitive exact match)
   bossFilter  String?  // when set, only kills/loot whose source matches this (case-insensitive) count — null = anything counts
+  clanOnly    Boolean  @default(true) // public page ignores players not in the clan's WOM group (no Guests section, their kills/drops left out) — data still stored
   minDropValue Int     @default(0) // drops whose stack value (price × quantity) is below this are left out of loot stats/top drops — still stored, and still count for attendance
   createdAt   DateTime @default(now())
 
