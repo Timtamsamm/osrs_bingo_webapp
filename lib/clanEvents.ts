@@ -137,6 +137,20 @@ export function formatGp(value: number): string {
   return value.toLocaleString();
 }
 
+/**
+ * Every join phrase still in use (events that haven't ended), always
+ * including the default "!join" — what admins' Dink needs to match.
+ * Case-insensitive dedupe, keeping the first spelling seen.
+ */
+export function activeJoinPhrases(events: Array<{ joinPhrase: string; endsAt: Date }>, now = new Date()): string[] {
+  const phrases = new Map<string, string>([["!join", "!join"]]);
+  for (const e of events) {
+    const key = e.joinPhrase.toLowerCase();
+    if (e.endsAt >= now && !phrases.has(key)) phrases.set(key, e.joinPhrase);
+  }
+  return [...phrases.values()];
+}
+
 export type EventStatus = "upcoming" | "live" | "ended";
 
 export function eventStatus(event: { startsAt: Date; endsAt: Date }, now = new Date()): EventStatus {

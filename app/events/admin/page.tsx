@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { ensureEventsToken, eventStatus } from "@/lib/clanEvents";
+import { activeJoinPhrases, ensureEventsToken, eventStatus } from "@/lib/clanEvents";
 import LocalTime from "@/app/components/LocalTime";
 import StatusBadge from "../StatusBadge";
 import WebhookSetup from "./WebhookSetup";
@@ -24,12 +24,7 @@ export default async function EventsAdminPage() {
     }),
   ]);
 
-  // Admins' Dink needs every join phrase still in use (case-insensitive dedupe).
-  const now = new Date();
-  const joinPhrases = new Map<string, string>([["!join", "!join"]]);
-  for (const e of events) {
-    if (e.endsAt >= now) joinPhrases.set(e.joinPhrase.toLowerCase(), e.joinPhrase);
-  }
+  const joinPhrases = activeJoinPhrases(events);
 
   return (
     <div className="flex flex-col gap-8 max-w-3xl w-full mx-auto">
@@ -42,7 +37,7 @@ export default async function EventsAdminPage() {
         </p>
       </div>
 
-      <WebhookSetup origin={origin} initialToken={token} joinPhrases={[...joinPhrases.values()]} />
+      <WebhookSetup origin={origin} initialToken={token} joinPhrases={joinPhrases} />
 
       <section className="flex flex-col gap-3">
         <h2 className="font-semibold text-purple-100">Events</h2>
