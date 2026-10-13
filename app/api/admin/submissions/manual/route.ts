@@ -1,17 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { diminishingPoints } from "@/lib/scoring";
+import { requireAdmin } from "@/lib/adminAuth";
+import { invalidateBingoPages } from "@/lib/bingoData";
 
 type TierDef = { tier: number; points: number; requiredCount: number; dinkItems: Array<{ id: number; name: string }> };
 type PointsConfig = { target: number; items: Array<{ id: number; name: string; basePoints: number }> };
-
-async function requireAdmin() {
-  const session = await auth();
-  if (!session || session.user.role !== "ADMIN") return null;
-  return session;
-}
 
 export async function POST(req: NextRequest) {
   if (!await requireAdmin()) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -82,5 +77,6 @@ export async function POST(req: NextRequest) {
   revalidatePath("/bingo/board");
   revalidatePath("/bingo/leaderboard");
   revalidatePath("/bingo/recent-drops");
+  invalidateBingoPages();
   return NextResponse.json(submission);
 }

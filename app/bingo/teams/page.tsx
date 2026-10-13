@@ -1,46 +1,18 @@
 export const dynamic = "force-dynamic";
 
-import { prisma } from "@/lib/prisma";
 import { getPreStartGate } from "@/app/components/PreStartGate";
 import Link from "next/link";
 import BoardTabNav from "@/app/components/BoardTabNav";
 import PageHeaderNav from "@/app/components/PageHeaderNav";
 import { computeStandings, type TierDef, type BonusConfig, type PointsConfig } from "@/lib/scoring";
+import { getActiveBoard, getTeamsWithSize } from "@/lib/bingoData";
 
 export default async function TeamsPage() {
   const gate = await getPreStartGate();
   if (gate) return gate;
 
-  const [board, teams] = await Promise.all([
-    prisma.bingoBoard.findFirst({
-      where: { active: true },
-      select: {
-        name: true,
-        rowColBonuses: true,
-        size: true,
-        scaleByTeamSize: true,
-        tiles: {
-          orderBy: { position: "asc" },
-          select: {
-            id: true,
-            position: true,
-            title: true,
-            scoringMode: true,
-            tiers: true,
-            pointsConfig: true,
-            submissions: {
-              where: { status: { not: "REJECTED" }, teamId: { not: null } },
-              select: { teamId: true, status: true, tier: true, pointsAwarded: true, dinkItemId: true },
-            },
-          },
-        },
-      },
-    }),
-    prisma.team.findMany({
-      orderBy: { name: "asc" },
-      select: { id: true, name: true, color: true, _count: { select: { participants: true } } },
-    }),
-  ]);
+  // Cached for a few seconds and shared across views — see lib/bingoData.
+  const [board, teams] = await Promise.all([getActiveBoard(), getTeamsWithSize()]);
 
   const size = board?.size ?? 5;
   const rawBonuses = board?.rowColBonuses as { t1?: number; t2?: number; t3?: number } | null;
@@ -56,9 +28,9 @@ export default async function TeamsPage() {
     submissions: t.submissions,
   }));
 
-  const teamsForScoring = teams.map((t) => ({ id: t.id, name: t.name, color: t.color, size: t._count.participants }));
+  const teamsForScoring = teams;
   const { standings, totalPoints, totalTiles } = computeStandings(scoringTiles, teamsForScoring, bonusConfig, size, board?.scaleByTeamSize ?? false);
-  const memberCountById = new Map(teams.map((t) => [t.id, t._count.participants]));
+  const memberCountById = new Map(teams.map((t) => [t.id, t.size]));
   const medals = ["🥇", "🥈", "🥉"];
 
   return (

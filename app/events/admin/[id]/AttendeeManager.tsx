@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import LocalTime from "@/app/components/LocalTime";
+import { confirmDialog } from "@/app/components/ConfirmDialog";
 import MemberSearchInput, { type MemberOption } from "@/app/components/MemberSearchInput";
 
 interface Attendee {
@@ -50,7 +51,7 @@ export default function AttendeeManager({
   }
 
   async function remove(a: Attendee) {
-    if (!confirm(`Remove ${a.rsn} from this event's attendance?`)) return;
+    if (!(await confirmDialog({ title: `Remove ${a.rsn}?`, message: "They're taken off this event's attendance. Their kills and drops stay recorded.", confirmLabel: "Remove", danger: true }))) return;
     await fetch(`/api/admin/events/${eventId}/attendees?attendeeId=${a.id}`, { method: "DELETE" });
     router.refresh();
   }

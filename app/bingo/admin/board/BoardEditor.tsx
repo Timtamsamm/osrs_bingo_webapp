@@ -11,6 +11,7 @@ import { parseItemLines as parseDinkItems, itemLinesToText as dinkItemsToText } 
 import { parsePreset } from "@/lib/boardPreset";
 import { DndContext, DragOverlay, useDraggable, useDroppable, PointerSensor, useSensor, useSensors, type DragStartEvent, type DragEndEvent } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
+import { confirmDialog } from "@/app/components/ConfirmDialog";
 
 export interface TierDef {
   tier: 1 | 2 | 3;
@@ -387,7 +388,11 @@ export default function BoardEditor({ board }: Props) {
   // Loads a preset file into the editor (not saved until "Save changes").
   // Embedded data-URL images are uploaded fresh so they survive a board reset.
   async function importPreset(file: File) {
-    if (!confirm("Replace the editor's board details and all tiles with this preset? Nothing is saved until you click Save. Event times and the Dink token are kept.")) return;
+    if (!(await confirmDialog({
+      title: "Load this preset?",
+      message: "It replaces the editor's board details and all tiles. Nothing is saved until you click Save, and event times and the Dink token are kept.",
+      confirmLabel: "Load preset",
+    }))) return;
     setImporting(true);
     setError("");
     setImportNote("");

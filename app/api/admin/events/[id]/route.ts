@@ -1,13 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { invalidateEventsWebhookCache } from "@/lib/webhookCache";
 import { parseEventInput } from "../eventInput";
-
-async function requireAdmin() {
-  const session = await auth();
-  if (!session || session.user.role !== "ADMIN") return null;
-  return session;
-}
+import { requireAdmin } from "@/lib/adminAuth";
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!await requireAdmin()) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -18,6 +13,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   try {
     const event = await prisma.clanEvent.update({ where: { id }, data: input });
+    invalidateEventsWebhookCache();
     return NextResponse.json(event);
   } catch {
     return NextResponse.json({ error: "Event not found" }, { status: 404 });
@@ -29,5 +25,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
 
   const { id } = await params;
   await prisma.clanEvent.delete({ where: { id } }).catch(() => null);
+  invalidateEventsWebhookCache();
   return NextResponse.json({ ok: true });
 }

@@ -1,13 +1,7 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { PRESET_FORMAT, PRESET_VERSION, type BoardPreset } from "@/lib/boardPreset";
-
-async function requireAdmin() {
-  const session = await auth();
-  if (!session || session.user.role !== "ADMIN") return null;
-  return session;
-}
+import { requireAdmin } from "@/lib/adminAuth";
 
 // Downloads the saved active board as a preset file (see lib/boardPreset.ts).
 export async function GET() {

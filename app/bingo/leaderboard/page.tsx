@@ -1,16 +1,17 @@
 export const dynamic = "force-dynamic";
 
-import { prisma } from "@/lib/prisma";
 import { getPreStartGate } from "@/app/components/PreStartGate";
 import BoardTabNav from "@/app/components/BoardTabNav";
 import PageHeaderNav from "@/app/components/PageHeaderNav";
 import LeaderboardTable from "./LeaderboardTable";
-import { fetchTempleStats, diffTempleStats, ensureTempleSnapshotTaken, type TempleSnapshotEntry, type TempleStats } from "@/lib/templeosrs";
+import { fetchTempleStats, diffTempleStats, type TempleSnapshotEntry, type TempleStats } from "@/lib/templeosrs";
+import { ensureTempleSnapshotThrottled, getActiveBoard, getParticipantsWithTeam, getTempleSnapshots } from "@/lib/bingoData";
 import {
   creditIndividualPoints,
   normalizeRsn,
   normalizedTeamSize,
   scaleFactorFor,
+  inGridTiles,
   type TierDef,
   type PointsConfig,
 } from "@/lib/scoring";
@@ -28,40 +29,17 @@ export default async function LeaderboardPage() {
   const gate = await getPreStartGate();
   if (gate) return gate;
 
-  const [board, participants] = await Promise.all([
-    prisma.bingoBoard.findFirst({
-      where: { active: true },
-      select: {
-        id: true,
-        name: true,
-        startsAt: true,
-        size: true,
-        scaleByTeamSize: true,
-        tiles: {
-          select: {
-            id: true,
-            position: true,
-            scoringMode: true,
-            tiers: true,
-            pointsConfig: true,
-            submissions: {
-              where: { status: "APPROVED", teamId: { not: null } },
-              select: { teamId: true, tier: true, teamMember: true, pointsAwarded: true, dinkItemId: true, createdAt: true },
-              orderBy: { createdAt: "asc" },
-            },
-          },
-        },
-      },
-    }),
-    prisma.participant.findMany({
-      include: { team: { select: { id: true, name: true, color: true } } },
-      orderBy: { rsn: "asc" },
-    }),
-  ]);
+  // Cached for a few seconds and shared across views — see lib/bingoData.
+  const [activeBoard, participants] = await Promise.all([getActiveBoard(), getParticipantsWithTeam()]);
+  // Only approved drops earn points here (the shared board data also holds pending ones).
+  const board = activeBoard && {
+    ...activeBoard,
+    tiles: activeBoard.tiles.map((t) => ({ ...t, submissions: t.submissions.filter((s) => s.status === "APPROVED") })),
+  };
 
   const size = board?.size ?? 5;
   // Tiles beyond the current grid size are hidden, not deleted — see lib/scoring.ts.
-  const inRangeTiles = (board?.tiles ?? []).filter((t) => t.position < size * size);
+  const inRangeTiles = inGridTiles(board?.tiles ?? [], size);
   const tierDefsByTile = new Map(inRangeTiles.map((t) => [t.id, (t.tiers as TierDef[]) ?? []]));
   const pointsConfigByTile = new Map(
     inRangeTiles.map((t) => [t.id, t.scoringMode === "POINTS" ? (t.pointsConfig as PointsConfig | null) : null])
@@ -107,13 +85,10 @@ export default async function LeaderboardPage() {
   // Full TempleOSRS stats gained since the event started, same
   // baseline-snapshot approach the team page uses — fetched here (not lazily
   // per-row) since we're already listing everyone.
-  if (board) await ensureTempleSnapshotTaken(board.id, board.startsAt);
+  if (board) await ensureTempleSnapshotThrottled(board.id, board.startsAt);
   const snapshotsByRsn = new Map<string, TempleSnapshotEntry>();
   if (board) {
-    const snapshots = await prisma.templeSnapshot.findMany({
-      where: { boardId: board.id },
-      select: { rsn: true, stats: true, collectionFinished: true },
-    });
+    const snapshots = await getTempleSnapshots(board.id);
     for (const s of snapshots) {
       snapshotsByRsn.set(s.rsn, { stats: s.stats as unknown as TempleStats, collectionFinished: s.collectionFinished });
     }

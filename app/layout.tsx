@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Cinzel } from "next/font/google";
+import localFont from "next/font/local";
 import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import LeadColorAmbience from "@/app/components/LeadColorAmbience";
 import PageFade from "@/app/components/PageFade";
+import ConfirmDialogHost from "@/app/components/ConfirmDialog";
 import { computeStandings, type TierDef, type PointsConfig } from "@/lib/scoring";
 import "./globals.css";
 
@@ -59,20 +60,28 @@ const getLeadingTeamColor = unstable_cache(
   { revalidate: 30 }
 );
 
-const geistSans = Geist({
+// Fonts live in app/fonts (latin subset, variable weights) rather than being
+// fetched from Google Fonts at build time — Google timing out used to fail
+// whole Vercel builds. Same files next/font/google downloaded.
+const geistSans = localFont({
+  src: "./fonts/Geist-latin.woff2",
   variable: "--font-geist-sans",
-  subsets: ["latin"],
+  weight: "100 900",
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
+const geistMono = localFont({
+  src: "./fonts/GeistMono-latin.woff2",
   variable: "--font-geist-mono",
-  subsets: ["latin"],
+  weight: "100 900",
+  display: "swap",
 });
 
-const cinzel = Cinzel({
+const cinzel = localFont({
+  src: "./fonts/Cinzel-latin.woff2",
   variable: "--font-cinzel",
-  subsets: ["latin"],
-  weight: ["700", "900"],
+  weight: "400 900",
+  display: "swap",
 });
 
 const SITE_TITLE = "Bingo Beasts";
@@ -111,6 +120,7 @@ export default async function RootLayout({
       <body className="min-h-full flex flex-col">
         <LeadColorAmbience color={leadColor} />
         <PageFade>{children}</PageFade>
+        <ConfirmDialogHost />
         <Analytics />
         <SpeedInsights />
       </body>

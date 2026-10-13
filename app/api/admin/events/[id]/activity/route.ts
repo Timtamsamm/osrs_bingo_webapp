@@ -1,13 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { del } from "@vercel/blob";
-import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-
-async function requireAdmin() {
-  const session = await auth();
-  if (!session || session.user.role !== "ADMIN") return null;
-  return session;
-}
+import { requireAdmin } from "@/lib/adminAuth";
 
 // Removes one kill or drop from an event (e.g. a fake or mis-attributed one).
 // Attendance isn't touched — remove the player separately if needed.

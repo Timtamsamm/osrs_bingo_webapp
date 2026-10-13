@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { parseItemLines, itemLinesToText } from "@/lib/itemListFormat";
+import { confirmDialog } from "@/app/components/ConfirmDialog";
 
 interface BossItem {
   id: string;
@@ -91,7 +92,7 @@ export default function BossDatabaseEditor({ initialBosses }: { initialBosses: B
   }
 
   async function deleteBoss(row: BossRow) {
-    if (!confirm(`Delete "${row.name}" and all its items? This can't be undone.`)) return;
+    if (!(await confirmDialog({ title: `Delete ${row.name}?`, message: "This deletes the boss and all its items. It can't be undone.", confirmLabel: "Delete", danger: true }))) return;
     const res = await fetch(`/api/admin/bosses/${row.id}`, { method: "DELETE" });
     if (!res.ok) {
       alert("Failed to delete boss");

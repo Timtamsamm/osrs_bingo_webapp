@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-
-async function requireAdmin() {
-  const session = await auth();
-  if (!session || session.user.role !== "ADMIN") return null;
-  return session;
-}
+import { requireAdmin } from "@/lib/adminAuth";
+import { invalidateBingoPages } from "@/lib/bingoData";
 
 export async function GET() {
   if (!await requireAdmin()) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -29,6 +24,7 @@ export async function POST(req: NextRequest) {
     const team = await prisma.team.create({
       data: { name: name.trim(), ...(color ? { color } : {}) },
     });
+    invalidateBingoPages();
     return NextResponse.json(team);
   } catch {
     return NextResponse.json({ error: "Team name already exists" }, { status: 409 });

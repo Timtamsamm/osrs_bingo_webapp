@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import LocalTime from "@/app/components/LocalTime";
+import { confirmDialog } from "@/app/components/ConfirmDialog";
 
 export interface ActivityItem {
   id: string;
@@ -31,7 +32,7 @@ export default function ActivityManager({ eventId, items }: { eventId: string; i
   const kills = items.filter((i) => i.type === "KILL").length;
 
   async function remove(item: ActivityItem) {
-    if (!confirm(`Remove ${item.type === "KILL" ? "this kill" : "this drop"}?\n\n${item.player}: ${item.title}`)) return;
+    if (!(await confirmDialog({ title: `Remove this ${item.type === "KILL" ? "kill" : "drop"}?`, message: `${item.player}: ${item.title}`, confirmLabel: "Remove", danger: true }))) return;
     setRemoving(item.id);
     await fetch(`/api/admin/events/${eventId}/activity?activityId=${item.id}`, { method: "DELETE" });
     setRemoving(null);

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { put } from "@vercel/blob";
 import { prisma } from "@/lib/prisma";
 import { getSettings } from "@/lib/settings";
+import { getEventsWebhookState, liveEventsAt } from "@/lib/webhookCache";
 import { normalizeRsn } from "@/lib/scoring";
 import { matchesBossFilter, recordAttendance } from "@/lib/clanEvents";
 import { lookupItem } from "@/lib/osrsItems";
@@ -107,10 +108,18 @@ export async function POST(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const token = searchParams.get("token");
 
-  const settings = await getSettings();
-  if (!settings?.eventsWebhookToken || token !== settings.eventsWebhookToken) {
+  // Token + live-event check from cache, before even reading the body: most
+  // Dink traffic arrives outside events and must not wake the database.
+  const state = await getEventsWebhookState();
+  // A token created since the cache was filled (only ever the first one) isn't
+  // in it yet — fall back to the DB for that rare case.
+  const validToken = state.token ?? (await getSettings())?.eventsWebhookToken ?? null;
+  if (!validToken || token !== validToken) {
     return NextResponse.json({ error: "bad_token" }, { status: 401 });
   }
+  const now = new Date();
+  const liveEvents = liveEventsAt(state.events, now);
+  if (!liveEvents.length) return NextResponse.json({ status: "no_live_event" });
 
   // Dink sends multipart (payload_json + screenshot) when an image is
   // attached, plain JSON otherwise. Only LOOT screenshots are kept.
@@ -138,13 +147,6 @@ export async function POST(req: NextRequest) {
   if (type !== "CHAT" && type !== "KILL_COUNT" && type !== "LOOT") {
     return NextResponse.json({ status: "ignored" });
   }
-
-  const now = new Date();
-  const liveEvents = await prisma.clanEvent.findMany({
-    where: { startsAt: { lte: now }, endsAt: { gte: now } },
-    select: { id: true, bossFilter: true },
-  });
-  if (!liveEvents.length) return NextResponse.json({ status: "no_live_event" });
 
   if (type === "CHAT") {
     const chatType = extra.type as string | undefined;

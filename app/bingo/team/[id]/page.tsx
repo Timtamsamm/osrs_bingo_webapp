@@ -1,16 +1,16 @@
 export const dynamic = "force-dynamic";
 
-import { prisma } from "@/lib/prisma";
 import { getPreStartGate } from "@/app/components/PreStartGate";
 import { auth } from "@/auth";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { fetchTeamStats, ensureTempleSnapshotTaken, type TempleSnapshotEntry, type TempleStats } from "@/lib/templeosrs";
+import { fetchTeamStats, type TempleSnapshotEntry, type TempleStats } from "@/lib/templeosrs";
+import { ensureTempleSnapshotThrottled, getActiveBoard, getTeam, getTeamSubmissions, getTeamsWithSize, getTempleSnapshots } from "@/lib/bingoData";
 import TeamProgressChart from "./TeamProgressChart";
 import TeamBoardGrid from "./TeamBoardGrid";
 import BoardTabNav from "@/app/components/BoardTabNav";
 import ZoomableThumbnail from "@/app/components/ZoomableThumbnail";
-import { computeStandings, bonusPts, getRows, getCols, scaledRequirement, scaleFactorFor, normalizedTeamSize, normalizeRsn, creditIndividualPoints, type TierDef, type BonusConfig, type PointsConfig } from "@/lib/scoring";
+import { computeStandings, bonusPts, getRows, getCols, scaledRequirement, scaleFactorFor, normalizedTeamSize, normalizeRsn, creditIndividualPoints, type TierDef, type BonusConfig, type PointsConfig, inGridTiles } from "@/lib/scoring";
 
 interface PointEvent {
   date: Date;
@@ -31,59 +31,21 @@ export default async function TeamPage({ params }: Props) {
   const session = await auth();
   const isAdmin = session?.user?.role === "ADMIN";
 
-  const [team, board, allTeams] = await Promise.all([
-    prisma.team.findUnique({
-      where: { id },
-      select: { id: true, name: true, color: true, participants: { select: { rsn: true }, orderBy: { rsn: "asc" } } },
-    }),
-    prisma.bingoBoard.findFirst({
-      where: { active: true },
-      select: {
-        id: true,
-        name: true,
-        startsAt: true,
-        rowColBonuses: true,
-        size: true,
-        scaleByTeamSize: true,
-        tiles: {
-          orderBy: { position: "asc" },
-          select: {
-            id: true,
-            position: true,
-            title: true,
-            imageUrl: true,
-            scoringMode: true,
-            tiers: true,
-            pointsConfig: true,
-            submissions: {
-              where: { status: { not: "REJECTED" }, teamId: { not: null } },
-              select: { teamId: true, status: true, tier: true, pointsAwarded: true, dinkItemId: true },
-            },
-          },
-        },
-      },
-    }),
-    prisma.team.findMany({ select: { id: true, name: true, color: true, _count: { select: { participants: true } } } }),
-  ]);
+  // Cached for a few seconds and shared across views — see lib/bingoData.
+  const [team, board, allTeams] = await Promise.all([getTeam(id), getActiveBoard(), getTeamsWithSize()]);
 
   if (!team) notFound();
 
   const scaleByTeamSize = board?.scaleByTeamSize ?? false;
-  const maxTeamSize = scaleByTeamSize ? Math.max(1, ...allTeams.map((t) => normalizedTeamSize(t._count.participants))) : 1;
+  const maxTeamSize = scaleByTeamSize ? Math.max(1, ...allTeams.map((t) => normalizedTeamSize(t.size))) : 1;
   const scaleFactor = scaleByTeamSize ? scaleFactorFor(normalizedTeamSize(team.participants.length), maxTeamSize) : 1;
 
-  const submissions = board
-    ? await prisma.submission.findMany({
-        where: { teamId: team.id, tile: { boardId: board.id } },
-        select: { id: true, tileId: true, tier: true, status: true, source: true, teamMember: true, dinkItemName: true, dinkItemId: true, dinkSource: true, imageUrl: true, note: true, createdAt: true, pointsAwarded: true },
-        orderBy: { createdAt: "asc" },
-      })
-    : [];
+  const submissions = board ? await getTeamSubmissions(team.id, board.id) : [];
 
   const size = board?.size ?? 5;
   // Tiles beyond the current grid size are left in the DB but hidden from
   // display/scoring — see lib/scoring.ts.
-  const inRangeTiles = (board?.tiles ?? []).filter((t) => t.position < size * size);
+  const inRangeTiles = inGridTiles(board?.tiles ?? [], size);
   const tileById = new Map(inRangeTiles.map((t) => [t.id, t]));
   const allTileTitleById = new Map((board?.tiles ?? []).map((t) => [t.id, t.title]));
   const tierDefsByTile = new Map(inRangeTiles.map((t) => [t.id, (t.tiers as TierDef[]) ?? []]));
@@ -289,18 +251,15 @@ export default async function TeamPage({ params }: Props) {
     pointsConfig: t.pointsConfig as PointsConfig | null,
     submissions: t.submissions,
   }));
-  const allTeamsForScoring = allTeams.map((t) => ({ id: t.id, name: t.name, color: t.color, size: t._count.participants }));
+  const allTeamsForScoring = allTeams;
   const { standings } = computeStandings(scoringTiles, allTeamsForScoring, bonusConfig, size, scaleByTeamSize);
   const rank = standings.findIndex((s) => s.id === team.id) + 1;
 
-  if (board) await ensureTempleSnapshotTaken(board.id, board.startsAt);
+  if (board) await ensureTempleSnapshotThrottled(board.id, board.startsAt);
 
   const snapshotsByRsn = new Map<string, TempleSnapshotEntry>();
   if (board) {
-    const snapshots = await prisma.templeSnapshot.findMany({
-      where: { boardId: board.id },
-      select: { rsn: true, stats: true, collectionFinished: true },
-    });
+    const snapshots = await getTempleSnapshots(board.id);
     for (const s of snapshots) {
       snapshotsByRsn.set(s.rsn, { stats: s.stats as unknown as TempleStats, collectionFinished: s.collectionFinished });
     }

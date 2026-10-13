@@ -1,6 +1,5 @@
 export const dynamic = "force-dynamic";
 
-import { prisma } from "@/lib/prisma";
 import { getPreStartGate } from "@/app/components/PreStartGate";
 import Link from "next/link";
 import BoardTabNav from "@/app/components/BoardTabNav";
@@ -8,34 +7,15 @@ import Countdown from "@/app/components/Countdown";
 import PageHeaderNav from "@/app/components/PageHeaderNav";
 import BoardView from "./BoardView";
 import type { TileSummary, LineSummary, BonusConfig } from "./BoardView";
-import { computeStandings, getLineBonusTier, getRows, getCols, pointsNominalMax, pointsTileProgress, scaledRequirement, scaleFactorFor, normalizedTeamSize, type TierDef, type PointsConfig } from "@/lib/scoring";
+import { computeStandings, getLineBonusTier, getRows, getCols, pointsNominalMax, pointsTileProgress, scaledRequirement, scaleFactorFor, normalizedTeamSize, type TierDef, type PointsConfig, inGridTiles } from "@/lib/scoring";
+import { getActiveBoard, getTeamsWithSize } from "@/lib/bingoData";
 
 export default async function BoardPage() {
   const gate = await getPreStartGate();
   if (gate) return gate;
 
-  const [board, rawTeams] = await Promise.all([
-    prisma.bingoBoard.findFirst({
-      where: { active: true },
-      include: {
-        tiles: {
-          orderBy: { position: "asc" },
-          include: {
-            submissions: {
-              where: { status: { not: "REJECTED" }, teamId: { not: null } },
-              select: { teamId: true, status: true, tier: true, pointsAwarded: true, dinkItemId: true },
-            },
-          },
-        },
-      },
-    }),
-    prisma.team.findMany({
-      orderBy: { name: "asc" },
-      select: { id: true, name: true, color: true, _count: { select: { participants: true } } },
-    }),
-  ]);
-
-  const teams = rawTeams.map((t) => ({ id: t.id, name: t.name, color: t.color, size: t._count.participants }));
+  // Cached for a few seconds and shared across views — see lib/bingoData.
+  const [board, teams] = await Promise.all([getActiveBoard(), getTeamsWithSize()]);
   const scaleByTeamSize = board?.scaleByTeamSize ?? false;
   const maxTeamSize = scaleByTeamSize ? Math.max(1, ...teams.map((t) => normalizedTeamSize(t.size))) : 1;
   const scaleFactorByTeam = new Map(teams.map((t) => [t.id, scaleByTeamSize ? scaleFactorFor(normalizedTeamSize(t.size), maxTeamSize) : 1]));
@@ -48,10 +28,8 @@ export default async function BoardPage() {
     t3: rawBonuses?.t3 ?? 0,
   };
 
-  // Tiles beyond the current grid size are left in the DB (from a previous
-  // larger size) but excluded from scoring and display — see lib/scoring.ts.
-  const scoringTiles = (board?.tiles ?? [])
-    .filter((tile) => tile.position < size * size)
+  // Tiles beyond the current grid size are hidden — see inGridTiles.
+  const scoringTiles = inGridTiles(board?.tiles ?? [], size)
     .map((tile) => ({
       id: tile.id,
       position: tile.position,

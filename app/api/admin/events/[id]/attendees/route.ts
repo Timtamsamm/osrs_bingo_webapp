@@ -1,13 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { recordAttendance } from "@/lib/clanEvents";
-
-async function requireAdmin() {
-  const session = await auth();
-  if (!session || session.user.role !== "ADMIN") return null;
-  return session;
-}
+import { requireAdmin } from "@/lib/adminAuth";
 
 // Manual add — for anyone attendance missed (e.g. a player without the Dink
 // setup, or at an event with no kills).

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { put } from "@vercel/blob";
-import { diminishingPoints } from "@/lib/scoring";
+import { diminishingPoints, inGridTiles } from "@/lib/scoring";
+import { getBingoWebhookState } from "@/lib/webhookCache";
 
 type TierDef = { tier: number; points: number; requiredCount: number; dinkItems: Array<{ id: number; name: string }> };
 type PointsConfig = { target: number; items: Array<{ id: number; name: string; basePoints: number }> };
@@ -21,6 +22,18 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const token = searchParams.get("token");
+
+  // Token + board window from cache, before reading the body or touching the
+  // database — players' Dink sends here all the time, bingo running or not.
+  const state = await getBingoWebhookState();
+  if (!state) return NextResponse.json({ error: "no_active_board" }, { status: 404 });
+  if (!state.token || token !== state.token) {
+    return NextResponse.json({ error: "bad_token" }, { status: 401 });
+  }
+  const nowMs = Date.now();
+  if ((state.startsAt && Date.parse(state.startsAt) > nowMs) || (state.endsAt && Date.parse(state.endsAt) < nowMs)) {
+    return NextResponse.json({ status: "event_closed" });
+  }
 
   let payload: Record<string, unknown>;
   let imageFile: File | null = null;
@@ -49,6 +62,8 @@ export async function POST(req: NextRequest) {
   const extra = (payload.extra ?? {}) as Record<string, unknown>;
 
   if (!playerName) return NextResponse.json({ status: "ignored" });
+  // Only these can ever score — skip the DB for everything else Dink sends.
+  if (type !== "LOOT" && type !== "COLLECTION" && type !== "PET") return NextResponse.json({ status: "ignored" });
 
   const board = await prisma.bingoBoard.findFirst({
     where: { active: true },
@@ -79,7 +94,7 @@ export async function POST(req: NextRequest) {
   // Tiles outside the current grid size are hidden (not deleted, see
   // lib/scoring.ts) — exclude them so drops can't create submissions on a
   // tile that no longer scores anything.
-  board.tiles = board.tiles.filter((t) => t.position < board.size * board.size);
+  board.tiles = inGridTiles(board.tiles, board.size);
 
   const now = new Date();
   if (board.startsAt && board.startsAt > now) return NextResponse.json({ status: "event_closed" });

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { confirmDialog } from "@/app/components/ConfirmDialog";
 
 interface Submission {
   id: string;
@@ -49,18 +50,20 @@ export default function SubmissionReviewer({ submission: s }: { submission: Subm
   }
 
   async function remove() {
-    if (!confirm("Delete this submission permanently?")) return;
+    if (!(await confirmDialog({ title: "Delete this submission?", message: "It's removed permanently.", confirmLabel: "Delete", danger: true }))) return;
     setLoading(true);
     await fetch(`/api/admin/submissions/${s.id}`, { method: "DELETE" });
     setLoading(false);
     router.refresh();
   }
 
-  function rejectWithConfirm() {
-    const message = isApproved
-      ? "Reject this submission? This undoes its auto-approval."
-      : "Reject this submission?";
-    if (!confirm(message)) return;
+  async function rejectWithConfirm() {
+    if (!(await confirmDialog({
+      title: "Reject this submission?",
+      message: isApproved ? "This undoes its auto-approval." : undefined,
+      confirmLabel: "Reject",
+      danger: true,
+    }))) return;
     decide("REJECTED");
   }
 

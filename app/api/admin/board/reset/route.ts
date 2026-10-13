@@ -1,13 +1,9 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { invalidateBingoWebhookCache } from "@/lib/webhookCache";
 import { del } from "@vercel/blob";
-
-async function requireAdmin() {
-  const session = await auth();
-  if (!session || session.user.role !== "ADMIN") return null;
-  return session;
-}
+import { requireAdmin } from "@/lib/adminAuth";
+import { invalidateBingoPages } from "@/lib/bingoData";
 
 export async function DELETE() {
   const session = await requireAdmin();
@@ -56,5 +52,7 @@ export async function DELETE() {
     await del(blobsToDelete);
   }
 
+  invalidateBingoWebhookCache();
+  invalidateBingoPages();
   return NextResponse.json({ deletedSubmissions: submissions.length, resetTiles: tileIds.length });
 }

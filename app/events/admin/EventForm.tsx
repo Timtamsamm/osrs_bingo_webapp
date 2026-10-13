@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import BossFilterPicker from "./BossFilterPicker";
 import DateTimePicker, { formatDatetimeLocal } from "@/app/components/DateTimePicker";
+import { confirmDialog } from "@/app/components/ConfirmDialog";
 
 export interface EventFormValues {
   id: string;
@@ -103,7 +104,7 @@ export default function EventForm({ event, bossNames }: { event?: EventFormValue
   }
 
   async function remove() {
-    if (!event || !confirm(`Delete "${event.name}" and all its attendance, kills and drops?`)) return;
+    if (!event || !(await confirmDialog({ title: `Delete ${event.name}?`, message: "All its attendance, kills, drops and stats are deleted too.", confirmLabel: "Delete event", danger: true }))) return;
     await fetch(`/api/admin/events/${event.id}`, { method: "DELETE" });
     router.push("/events/admin");
     router.refresh();

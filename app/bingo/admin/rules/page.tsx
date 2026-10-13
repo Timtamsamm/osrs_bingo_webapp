@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getSettings } from "@/lib/settings";
 import GeneralRulesForm from "./GeneralRulesForm";
 import TileRulesForm from "./TileRulesForm";
+import { inGridTiles } from "@/lib/scoring";
 
 export default async function AdminRulesPage() {
   const [settings, board] = await Promise.all([
@@ -19,8 +20,8 @@ export default async function AdminRulesPage() {
   ]);
 
   const size = board?.size ?? 5;
-  const tiles = (board?.tiles ?? [])
-    .filter((t) => t.position < size * size && t.title.trim())
+  const tiles = inGridTiles(board?.tiles ?? [], size)
+    .filter((t) => t.title.trim())
     .map((t) => ({ id: t.id, title: t.title, rules: t.rules ?? "" }));
 
   return (

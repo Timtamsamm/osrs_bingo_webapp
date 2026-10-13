@@ -134,6 +134,15 @@ export function pointsTileProgress(
   return { earned: total, completed, receivedItemIds };
 }
 
+/**
+ * Shrinking a board doesn't delete the tiles outside the new grid — they're
+ * hidden and ignored everywhere (scoring, display, Dink matching) so growing
+ * the board back restores them. Tile positions run row by row from 0.
+ */
+export function inGridTiles<T extends { position: number }>(tiles: T[], size: number): T[] {
+  return tiles.filter((t) => t.position < size * size);
+}
+
 export function normalizeRsn(rsn: string): string {
   return rsn.trim().replace(/[_ ]/g, " ").toLowerCase();
 }
@@ -228,8 +237,7 @@ export function computeStandings(
   size: number,
   scaleByTeamSize: boolean = false
 ): { standings: TeamStanding[]; totalPoints: number; totalTiles: number } {
-  // Tiles left over from a larger board size are ignored, not deleted — see getRows/getCols.
-  const tiles = allTiles.filter((t) => t.position < size * size);
+  const tiles = inGridTiles(allTiles, size);
   const rows = getRows(size);
   const cols = getCols(size);
   const maxTeamSize = scaleByTeamSize ? Math.max(1, ...teams.map((t) => normalizedTeamSize(t.size))) : 1;

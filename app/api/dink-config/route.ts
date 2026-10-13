@@ -1,52 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-
-type TierDef = { tier: number; points: number; requiredCount: number; dinkItems: Array<{ id: number; name: string }> };
-type PointsConfig = { target: number; items: Array<{ id: number; name: string; basePoints: number }> };
+import { getBingoWebhookState } from "@/lib/webhookCache";
 
 // Dink's "Dynamic Config URL" feature (Advanced tab) fetches this on login and
 // every ~3h, and merges the returned JSON straight into the player's local
 // Dink settings. No auth header is sent, so the board's dinkToken doubles as
-// the lookup key here (matches the webhook route's auth model).
+// the lookup key here (matches the webhook route's auth model). Answered from
+// cache (lib/webhookCache) — every player's Dink polls this, so it mustn't
+// wake the database.
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const token = searchParams.get("token");
 
-  const board = await prisma.bingoBoard.findFirst({
-    where: { active: true },
-    select: {
-      dinkToken: true,
-      size: true,
-      tiles: { select: { position: true, scoringMode: true, tiers: true, pointsConfig: true } },
-    },
-  });
-
-  if (!board || !board.dinkToken || token !== board.dinkToken) {
+  const board = await getBingoWebhookState();
+  if (!board || !board.token || token !== board.token) {
     return NextResponse.json({ error: "bad_token" }, { status: 401 });
   }
-
-  // Tiles outside the current grid size are hidden (not deleted) — see
-  // lib/scoring.ts — so exclude them here too, or players would get notified
-  // for items that can no longer score anything.
-  const inRangeTiles = board.tiles.filter((t) => t.position < board.size * board.size);
-
-  const itemNames = new Set<string>();
-  for (const tile of inRangeTiles) {
-    if (tile.scoringMode === "POINTS") {
-      const cfg = tile.pointsConfig as PointsConfig | null;
-      for (const item of cfg?.items ?? []) itemNames.add(item.name);
-      continue;
-    }
-    const tiers = (tile.tiers as TierDef[]) ?? [];
-    for (const tierDef of tiers) {
-      for (const item of tierDef.dinkItems) {
-        itemNames.add(item.name);
-      }
-    }
-  }
+  // In-range tiles' item names, computed when the cache was filled.
+  const itemNames = board.itemNames;
 
   const webhookUrl = new URL("/api/webhook/dink", req.url);
-  webhookUrl.searchParams.set("token", board.dinkToken);
+  webhookUrl.searchParams.set("token", board.token);
 
   const url = webhookUrl.toString();
 

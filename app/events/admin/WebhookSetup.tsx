@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { discordSetupMessage, dinkSettings, eventsWebhookUrl } from "@/lib/eventsDinkSetup";
+import { confirmDialog } from "@/app/components/ConfirmDialog";
 
 export default function WebhookSetup({ origin, initialToken }: { origin: string; initialToken: string }) {
   const [token, setToken] = useState(initialToken);
@@ -19,7 +20,12 @@ export default function WebhookSetup({ origin, initialToken }: { origin: string;
   }
 
   async function regenerate() {
-    if (!confirm("Generate a new link? The old one stops working immediately — everyone using it will need to import the setup again.")) return;
+    if (!(await confirmDialog({
+      title: "Generate a new link?",
+      message: "The old link stops working immediately. Everyone using it will need to import the setup again (/events in Discord).",
+      confirmLabel: "New link",
+      danger: true,
+    }))) return;
     setRegenerating(true);
     const res = await fetch("/api/admin/events/token", { method: "POST" });
     setRegenerating(false);

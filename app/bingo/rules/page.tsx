@@ -5,6 +5,7 @@ import { getPreStartGate } from "@/app/components/PreStartGate";
 import { getSettings } from "@/lib/settings";
 import BoardTabNav from "@/app/components/BoardTabNav";
 import PageHeaderNav from "@/app/components/PageHeaderNav";
+import { inGridTiles } from "@/lib/scoring";
 
 export default async function RulesPage() {
   const gate = await getPreStartGate();
@@ -25,7 +26,7 @@ export default async function RulesPage() {
   ]);
 
   const size = board?.size ?? 5;
-  const boardTiles = (board?.tiles ?? []).filter((t) => t.position < size * size && t.title.trim());
+  const boardTiles = inGridTiles(board?.tiles ?? [], size).filter((t) => t.title.trim());
 
   return (
     <div className="min-h-screen bg-base text-white">

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import MemberSearchInput, { type MemberOption } from "@/app/components/MemberSearchInput";
+import { confirmDialog } from "@/app/components/ConfirmDialog";
 
 interface Participant {
   id: string;
@@ -83,7 +84,7 @@ export default function TeamsEditor({ teams: initialTeams, members }: Props) {
   }
 
   async function deleteTeam(teamId: string) {
-    if (!confirm("Delete this team and all its participants? Submissions will remain but be unlinked.")) return;
+    if (!(await confirmDialog({ title: "Delete this team?", message: "All its participants are removed too. Its submissions stay, but are no longer linked to a team.", confirmLabel: "Delete team", danger: true }))) return;
     setLoading(true);
     await fetch(`/api/admin/teams/${teamId}`, { method: "DELETE" });
     setLoading(false);

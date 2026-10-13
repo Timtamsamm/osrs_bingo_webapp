@@ -1,6 +1,6 @@
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
 import Countdown from "@/app/components/Countdown";
+import { getUpcomingBoard } from "@/lib/bingoData";
 
 // Before the active board's start time, every public bingo page shows only this
 // countdown so the tiles can't be scouted early. Admins bypass it so they can
@@ -31,13 +31,6 @@ export async function getPreStartGate(): Promise<React.ReactNode | null> {
 }
 
 // Active board, but only while its start time is still in the future.
-async function getUpcomingBoard() {
-  const board = await prisma.bingoBoard.findFirst({
-    where: { active: true },
-    select: { name: true, description: true, startsAt: true },
-  });
-  return board?.startsAt && board.startsAt > new Date() ? board : null;
-}
 
 export async function PreStartAdminNotice() {
   const session = await auth();

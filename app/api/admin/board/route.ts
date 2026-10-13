@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { invalidateBingoWebhookCache } from "@/lib/webhookCache";
 import { Prisma } from "@prisma/client";
+import { requireAdmin } from "@/lib/adminAuth";
+import { invalidateBingoPages } from "@/lib/bingoData";
 
 type DinkItem = { id: number; name: string };
 type TierDef = { tier: 1 | 2 | 3; points: number; requiredCount: number; description?: string; dinkItems: DinkItem[] };
@@ -15,12 +17,6 @@ type TileInput = {
   tiers: TierDef[];
   pointsConfig?: PointsConfig | null;
 };
-
-async function requireAdmin() {
-  const session = await auth();
-  if (!session || session.user.role !== "ADMIN") return null;
-  return session;
-}
 
 export async function POST(req: NextRequest) {
   if (!await requireAdmin()) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -58,6 +54,8 @@ export async function POST(req: NextRequest) {
     },
   });
 
+  invalidateBingoWebhookCache();
+  invalidateBingoPages();
   return NextResponse.json(board);
 }
 
@@ -103,5 +101,7 @@ export async function PUT(req: NextRequest) {
     }
   }
 
+  invalidateBingoWebhookCache();
+  invalidateBingoPages();
   return NextResponse.json({ ok: true });
 }

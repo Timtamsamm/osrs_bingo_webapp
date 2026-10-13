@@ -1,8 +1,8 @@
-import { prisma } from "@/lib/prisma";
 import { getPreStartGate } from "@/app/components/PreStartGate";
 import BoardTabNav from "@/app/components/BoardTabNav";
 import PageHeaderNav from "@/app/components/PageHeaderNav";
 import RecentDropsFilter from "./RecentDropsFilter";
+import { getActiveBoard, getRecentDrops } from "@/lib/bingoData";
 
 const DROPS_LIMIT = 100;
 
@@ -10,31 +10,9 @@ export default async function RecentDropsPage() {
   const gate = await getPreStartGate();
   if (gate) return gate;
 
-  const board = await prisma.bingoBoard.findFirst({
-    where: { active: true },
-    select: { id: true, name: true },
-  });
-
-  const drops = board
-    ? await prisma.submission.findMany({
-        where: { status: "APPROVED", tile: { boardId: board.id } },
-        select: {
-          id: true,
-          tier: true,
-          source: true,
-          dinkSource: true,
-          teamMember: true,
-          dinkItemName: true,
-          pointsAwarded: true,
-          imageUrl: true,
-          createdAt: true,
-          tile: { select: { title: true } },
-          team: { select: { id: true, name: true, color: true } },
-        },
-        orderBy: { createdAt: "desc" },
-        take: DROPS_LIMIT,
-      })
-    : [];
+  // Cached for a few seconds and shared across views — see lib/bingoData.
+  const board = await getActiveBoard();
+  const drops = board ? await getRecentDrops(board.id, DROPS_LIMIT) : [];
 
   const bosses = [...new Set(drops.map((d) => d.dinkSource).filter((s): s is string => !!s))].sort();
 
