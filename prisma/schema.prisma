@@ -206,6 +206,7 @@ model ClanEvent {
 
   attendees ClanEventAttendee[]
   activity  ClanEventActivity[]
+  statSnapshots ClanEventStatSnapshot[]
 }
 
 model ClanEventAttendee {
@@ -242,6 +243,26 @@ model ClanEventActivity {
   createdAt DateTime  @default(now())
 
   @@index([eventId, createdAt])
+}
+
+// TempleOSRS stats per event participant, for "Stats gained". The baseline
+// is taken when the player is first recorded (their first kill/drop — event
+// participants aren't known before then); the final stats are the latest
+// TempleOSRS datapoint from before the event ended (+ a logout grace period).
+model ClanEventStatSnapshot {
+  id                String    @id @default(cuid())
+  eventId           String
+  event             ClanEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  rsn               String
+  rsnKey            String
+  baseline          Json?     // serialized TempleStats — null until TempleOSRS answers (retried)
+  baselineAt        DateTime?
+  final             Json?     // serialized TempleStats — set once, after the event ends
+  finalAt           DateTime?
+  updateRequestedAt DateTime? // last time we asked TempleOSRS to refresh this player (throttled)
+  createdAt         DateTime  @default(now())
+
+  @@unique([eventId, rsnKey])
 }
 
 model Event {

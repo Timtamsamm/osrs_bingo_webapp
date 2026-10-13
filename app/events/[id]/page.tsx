@@ -10,6 +10,7 @@ import { eventStatus, findClanMember, formatGp, formatClanRole, getClanRoster, s
 import StatusBadge from "../StatusBadge";
 import ZoomableThumbnail from "@/app/components/ZoomableThumbnail";
 import { fastestKills, formatDuration } from "@/lib/killTimes";
+import { eventGains, finalizeEventStats, type PlayerGains } from "@/lib/eventStats";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -18,7 +19,7 @@ interface Props {
 export default async function EventPage({ params }: Props) {
   const { id } = await params;
 
-  const [event, roster] = await Promise.all([
+  const [event, roster, gains] = await Promise.all([
     prisma.clanEvent.findUnique({
       where: { id },
       include: {
@@ -27,6 +28,7 @@ export default async function EventPage({ params }: Props) {
       },
     }),
     getClanRoster(),
+    eventGains(id),
   ]);
   if (!event) notFound();
 
@@ -39,6 +41,9 @@ export default async function EventPage({ params }: Props) {
   // WOM roster loaded — otherwise everyone counts rather than no one).
   const hideGuests = event.clanOnly && roster != null;
   const isShown = (rsn: string) => !hideGuests || findClanMember(roster, rsn) != null;
+
+  // Locks in final TempleOSRS stats once the event (+ logout grace) is over.
+  finalizeEventStats(event);
   // TIME rows are kill-time lines, only used for Fastest kills below.
   const activity = event.activity.filter(
     (a) => (a.type === "KILL" || (a.type === "LOOT" && stackValue(a) >= event.minDropValue)) && isShown(a.rsn)
@@ -103,7 +108,7 @@ export default async function EventPage({ params }: Props) {
         </div>
 
         <div className="flex justify-center mb-6">
-          <Link href="/events" className="text-sm text-purple-400 hover:text-purple-200 transition-colors">
+          <Link href="/events" className="inline-flex items-center gap-1.5 rounded-full border border-purple-800/50 bg-surface/60 px-3.5 py-2 text-sm text-purple-300 hover:text-white hover:border-purple-600/60 hover:bg-raised/60 transition-colors font-medium">
             ← All events
           </Link>
         </div>
@@ -163,6 +168,19 @@ export default async function EventPage({ params }: Props) {
             </div>
           )}
         </section>
+
+        <StatsGained
+          players={gains.players
+            .map((g) => {
+              const attendee = event.attendees.find((a) => a.rsnKey === g.rsnKey);
+              return attendee && isShown(attendee.rsn)
+                ? { ...g, name: findClanMember(roster, attendee.rsn)?.displayName ?? attendee.rsn }
+                : null;
+            })
+            .filter((g): g is PlayerGains & { name: string } => g != null)
+            .sort((a, b) => b.xp - a.xp)}
+          final={gains.final}
+        />
 
         {fastest.length > 0 && (
           <section className="mb-8">
@@ -285,5 +303,76 @@ function AttendanceTable({ players, hasActivity }: { players: AttendanceRow[]; h
         </tbody>
       </table>
     </div>
+  );
+}
+
+const fmtXp = (xp: number) => (xp >= 1_000_000 ? `${(xp / 1_000_000).toFixed(2)}M` : xp.toLocaleString());
+const fmtHours = (h: number) => h.toFixed(2);
+
+function StatsGained({ players, final }: { players: Array<PlayerGains & { name: string }>; final: boolean }) {
+  if (!players.length) return null;
+  const total = players.reduce((t, p) => ({ xp: t.xp + p.xp, ehp: t.ehp + p.ehp, ehb: t.ehb + p.ehb }), { xp: 0, ehp: 0, ehb: 0 });
+  return (
+    <section className="mb-8">
+      <h2 className="font-[family-name:var(--font-cinzel)] text-xl font-bold text-white heading-glow mb-1">Stats gained</h2>
+      <p className="text-xs text-purple-500/80 mb-3">
+        From TempleOSRS, since each player&apos;s first kill or drop. The hiscores update when a player logs out or hops worlds.{" "}
+        {final ? "Final." : "Locks in 30 minutes after the event ends."}
+      </p>
+      <div className="bg-[#0e0820] border border-purple-900/40 rounded-2xl overflow-hidden">
+        <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-4 px-4 py-2.5 text-xs text-purple-500 uppercase tracking-wider border-b border-purple-900/40">
+          <span>Player</span>
+          <span className="text-right w-20">XP</span>
+          <span className="text-right w-12">EHP</span>
+          <span className="text-right w-12">EHB</span>
+        </div>
+        <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-4 px-4 py-2.5 text-sm bg-purple-900/15 border-b border-purple-900/40 font-semibold">
+          <span className="text-purple-200 pl-4">Event total</span>
+          <span className="text-right w-20 tabular-nums text-green-300">{fmtXp(total.xp)}</span>
+          <span className="text-right w-12 tabular-nums text-purple-200">{fmtHours(total.ehp)}</span>
+          <span className="text-right w-12 tabular-nums text-amber-300/90">{fmtHours(total.ehb)}</span>
+        </div>
+        {players.map((p) => (
+          <details key={p.rsnKey} className="group border-b border-purple-900/20 last:border-0">
+            <summary className="grid grid-cols-[1fr_auto_auto_auto] gap-x-4 px-4 py-2.5 text-sm cursor-pointer list-none hover:bg-purple-900/10">
+              <span className="text-purple-100 font-medium truncate">
+                <span className="inline-block w-3 text-purple-500 group-open:rotate-90 transition-transform">›</span> {p.name}
+              </span>
+              <span className="text-right w-20 tabular-nums text-green-300">{fmtXp(p.xp)}</span>
+              <span className="text-right w-12 tabular-nums text-purple-200">{fmtHours(p.ehp)}</span>
+              <span className="text-right w-12 tabular-nums text-amber-300/90">{fmtHours(p.ehb)}</span>
+            </summary>
+            <div className="px-4 pb-3 pl-8 grid gap-3 sm:grid-cols-2 text-xs">
+              <div>
+                <p className="text-purple-400 font-semibold mb-1">Skills</p>
+                {p.skills.length ? (
+                  p.skills.map((s) => (
+                    <p key={s.name} className="flex justify-between gap-2 text-purple-200">
+                      <span>{s.name}</span>
+                      <span className="tabular-nums">+{s.xp.toLocaleString()} xp</span>
+                    </p>
+                  ))
+                ) : (
+                  <p className="text-purple-600">No XP gained yet</p>
+                )}
+              </div>
+              <div>
+                <p className="text-purple-400 font-semibold mb-1">Boss KC</p>
+                {p.bosses.length ? (
+                  p.bosses.map((b) => (
+                    <p key={b.name} className="flex justify-between gap-2 text-purple-200">
+                      <span>{b.name}</span>
+                      <span className="tabular-nums">+{b.kc.toLocaleString()}</span>
+                    </p>
+                  ))
+                ) : (
+                  <p className="text-purple-600">No boss kills yet</p>
+                )}
+              </div>
+            </div>
+          </details>
+        ))}
+      </div>
+    </section>
   );
 }

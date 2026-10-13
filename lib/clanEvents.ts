@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getSettings, updateSettings } from "@/lib/settings";
 import { normalizeRsn } from "@/lib/scoring";
 import { fetchGroupMembers, type WomMember } from "@/lib/wiseoldman";
+import { trackEventStats } from "@/lib/eventStats";
 
 export type AttendanceVia = "kill" | "loot" | "party" | "manual";
 
@@ -73,6 +74,10 @@ export async function recordAttendance(eventId: string, rsn: string, via: Attend
       return;
     }
     throw e;
+  } finally {
+    // TempleOSRS baseline on first sighting, then throttled refreshes —
+    // runs after the response is sent.
+    trackEventStats(eventId, rsn);
   }
 }
 

@@ -142,6 +142,8 @@ async function fetchCollectionLogStatsUncached(rsn: string): Promise<CollectionL
 }
 
 export const fetchTempleStats = unstable_cache(fetchTempleStatsUncached, ["temple-stats"], { revalidate: CACHE_SECONDS });
+/** Uncached — for snapshots taken right after asking TempleOSRS to update a player. */
+export const fetchTempleStatsFresh = fetchTempleStatsUncached;
 export const fetchCollectionLogStats = unstable_cache(fetchCollectionLogStatsUncached, ["temple-collection-log"], { revalidate: CACHE_SECONDS });
 
 export interface TeamStats {

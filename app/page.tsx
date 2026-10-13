@@ -16,13 +16,11 @@ export default async function HomePage() {
     {
       href: "/bingo/board",
       title: "Bingo",
-      description: "Board, teams, drops and rules for the current bingo.",
       live: null as string | null,
     },
     {
       href: "/events",
       title: "Events",
-      description: "Clan events: who attended, kills and drops.",
       live: liveEvent ? `Live: ${liveEvent.name}` : null,
     },
   ];
@@ -53,11 +51,10 @@ export default async function HomePage() {
               href={s.href}
               className="group rounded-2xl border border-purple-900/40 bg-[#0e0820] p-6 transition-all hover:border-purple-500/50 purple-glow-sm"
             >
-              <div className="flex items-center justify-between gap-2 mb-2">
-                <h2 className="font-[family-name:var(--font-cinzel)] text-xl font-bold text-white">{s.title}</h2>
-                <span className="text-purple-500 group-hover:text-purple-300 group-hover:translate-x-0.5 transition-all">→</span>
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="font-[family-name:var(--font-cinzel)] text-3xl font-black text-white">{s.title}</h2>
+                <span className="text-2xl text-purple-500 group-hover:text-purple-300 group-hover:translate-x-0.5 transition-all">→</span>
               </div>
-              <p className="text-sm text-purple-500/80">{s.description}</p>
               {s.live && (
                 <p className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-green-300 bg-green-500/10 border border-green-500/40 rounded-full px-2.5 py-0.5 max-w-full">
                   <span className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />
