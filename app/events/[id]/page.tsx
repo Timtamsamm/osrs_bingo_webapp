@@ -54,18 +54,17 @@ export default async function EventPage({ params }: Props) {
   const fastest = killTimesByBoss(
     activity.filter((a) => a.type === "KILL"),
     event.activity.filter((a) => a.type === "TIME"),
-    (rsn) => (isShown(rsn) ? (findClanMember(roster, rsn)?.displayName ?? rsn) : null)
+    (rsn) => (isShown(rsn) ? (findClanMember(roster, rsn)?.displayName ?? rsn) : null),
+    event.groupEvent
   );
 
   // Per-player totals, keyed by normalized RSN so they line up with attendees.
   const totals = new Map<string, { kills: number; drops: number; value: number }>();
-  let totalKills = 0;
   let totalValue = 0;
   for (const a of activity) {
     const t = totals.get(a.rsnKey) ?? { kills: 0, drops: 0, value: 0 };
     if (a.type === "KILL") {
       t.kills++;
-      totalKills++;
     } else {
       const value = stackValue(a);
       t.drops++;
@@ -74,6 +73,14 @@ export default async function EventPage({ params }: Props) {
     }
     totals.set(a.rsnKey, t);
   }
+
+  // Group event: everyone is in every kill and each of them reports it, so the
+  // event's kill count is the most kills any one player has. Otherwise each
+  // reported kill is a separate kill.
+  const killsPerPlayer = [...totals.values()].map((t) => t.kills);
+  const totalKills = event.groupEvent
+    ? Math.max(0, ...killsPerPlayer)
+    : killsPerPlayer.reduce((sum, k) => sum + k, 0);
 
   const hasActivity = activity.length > 0;
   const drops = activity

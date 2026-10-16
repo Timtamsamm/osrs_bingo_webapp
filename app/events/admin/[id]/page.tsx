@@ -57,6 +57,7 @@ export default async function EventAdminPage({ params }: Props) {
           bossFilter: event.bossFilter,
           minDropValue: event.minDropValue,
           clanOnly: event.clanOnly,
+          groupEvent: event.groupEvent,
         }}
       />
 

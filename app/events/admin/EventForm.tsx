@@ -15,6 +15,7 @@ export interface EventFormValues {
   bossFilter: string | null;
   minDropValue: number;
   clanOnly: boolean;
+  groupEvent: boolean;
 }
 
 function toDatetimeLocal(date: string): string {
@@ -56,6 +57,7 @@ export default function EventForm({ event, bossNames }: { event?: EventFormValue
   const [bossFilter, setBossFilter] = useState(event?.bossFilter ?? "");
   const [minDrop, setMinDrop] = useState(event?.minDropValue ? formatGpInput(event.minDropValue) : "");
   const [clanOnly, setClanOnly] = useState(event?.clanOnly ?? true);
+  const [groupEvent, setGroupEvent] = useState(event?.groupEvent ?? false);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
   const [error, setError] = useState("");
@@ -86,6 +88,7 @@ export default function EventForm({ event, bossNames }: { event?: EventFormValue
         bossFilter,
         minDropValue,
         clanOnly,
+        groupEvent,
       }),
     });
     setSaving(false);
@@ -164,6 +167,17 @@ export default function EventForm({ event, bossNames }: { event?: EventFormValue
           {clanOnly
             ? "Players not in the clan's Wise Old Man group are left off the public page, and their kills/drops don't count. They still show here, tagged \"Not in clan\"."
             : "Players not in the clan are shown on the public page as guests, and their kills/drops count."}
+        </span>
+      </div>
+      <div className="flex flex-col gap-1">
+        <label className="flex items-center gap-2 cursor-pointer w-fit">
+          <input type="checkbox" checked={groupEvent} onChange={(e) => setGroupEvent(e.target.checked)} className="accent-purple-600" />
+          <span className="text-xs font-medium text-purple-300">Group event</span>
+        </label>
+        <span className="text-[11px] text-purple-600/80">
+          {groupEvent
+            ? "Everyone kills the boss together (e.g. a Nightmare mass). Total kills = the most kills any one player has, and each kill shows once in Fastest kills with everyone's names."
+            : "Players kill on their own. Total kills adds up everyone's kills."}
         </span>
       </div>
       <div className="flex flex-wrap items-center gap-3">

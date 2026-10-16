@@ -63,6 +63,42 @@ export function formatDuration(ms: number): string {
 const PAIR_WINDOW_MS = 20_000;
 // Teammates' reports of one raid can differ by a tick of rounding.
 const SAME_RUN_TOLERANCE_MS = 50;
+// In a group kill every player's game prints its own "Your X kill count is"
+// line, so each player's Dink reports the kill — all within a second or two.
+// Separate kills of the same boss are minutes apart.
+const GROUP_KILL_WINDOW_MS = 15_000;
+
+/**
+ * Groups kill rows into actual kills: reports of the same boss within
+ * GROUP_KILL_WINDOW_MS of a group's first report are one group kill.
+ * Returns a group id per row.
+ */
+export function groupKillIds<T extends { source: string | null; createdAt: Date }>(kills: T[]): Map<T, number> {
+  const byBoss = new Map<string, T[]>();
+  for (const k of kills) {
+    const key = (k.source ?? "").trim().toLowerCase();
+    const list = byBoss.get(key) ?? [];
+    list.push(k);
+    byBoss.set(key, list);
+  }
+  const ids = new Map<T, number>();
+  let next = 0;
+  for (const list of byBoss.values()) {
+    list.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    let groupStart = -Infinity;
+    let id = -1;
+    for (const k of list) {
+      const t = k.createdAt.getTime();
+      if (t - groupStart > GROUP_KILL_WINDOW_MS) {
+        groupStart = t;
+        id = next++;
+      }
+      ids.set(k, id);
+    }
+  }
+  return ids;
+}
+
 
 type KillRow = {
   rsn: string;
@@ -101,7 +137,9 @@ export type BossTimes = {
 export function killTimesByBoss(
   kills: KillRow[],
   times: TimeRow[],
-  displayName: (rsn: string) => string | null
+  displayName: (rsn: string) => string | null,
+  /** Group event: every player's report of one kill is the same run. */
+  mergeGroupKills = false
 ): BossTimes[] {
   const timesByPlayer = new Map<string, TimeRow[]>();
   for (const t of times) {
@@ -111,6 +149,8 @@ export function killTimesByBoss(
     timesByPlayer.set(t.rsnKey, list);
   }
 
+  const groupOf = mergeGroupKills ? groupKillIds(kills) : new Map<KillRow, number>();
+  const runGroup = new Map<FastestKill, number>();
   const runsByBoss = new Map<string, FastestKill[]>();
   for (const k of kills) {
     if (!k.source) continue;
@@ -134,13 +174,19 @@ export function killTimesByBoss(
 
     const key = k.source.trim().toLowerCase();
     const runs = runsByBoss.get(key) ?? [];
-    // Same run reported by another teammate — merge the names.
-    const sameRun = runs.find((r) => Math.abs(r.ms - ms!) <= SAME_RUN_TOLERANCE_MS);
+    // Same run reported by another player in the group (same group kill, or
+    // an identical time) — merge the names. Players' reported times for one
+    // group kill can differ by a tick, so keep the fastest.
+    const group = groupOf.get(k);
+    const sameRun = runs.find((r) => runGroup.get(r) === group || Math.abs(r.ms - ms!) <= SAME_RUN_TOLERANCE_MS);
     if (sameRun) {
       for (const name of team) if (!sameRun.players.includes(name)) sameRun.players.push(name);
       sameRun.isPb ||= isPb;
+      sameRun.ms = Math.min(sameRun.ms, ms);
     } else {
-      runs.push({ boss: k.source, ms, isPb, players: team, killCount: k.killCount });
+      const run = { boss: k.source, ms, isPb, players: team, killCount: k.killCount };
+      runs.push(run);
+      if (group != null) runGroup.set(run, group);
     }
     runsByBoss.set(key, runs);
   }

@@ -7,6 +7,7 @@ export type EventInput = {
   bossFilter: string | null;
   minDropValue: number;
   clanOnly: boolean;
+  groupEvent: boolean;
 };
 
 export function parseEventInput(body: Record<string, unknown>): EventInput | { error: string } {
@@ -28,5 +29,7 @@ export function parseEventInput(body: Record<string, unknown>): EventInput | { e
   // Missing = on, matching the column default.
   const clanOnly = body.clanOnly !== false;
 
-  return { name, description, startsAt, endsAt, bossFilter, minDropValue, clanOnly };
+  const groupEvent = body.groupEvent === true;
+
+  return { name, description, startsAt, endsAt, bossFilter, minDropValue, clanOnly, groupEvent };
 }
