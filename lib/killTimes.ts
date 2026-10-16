@@ -13,8 +13,11 @@
 
 // "1:23.40", "46:31.80", "1:00:56.50", "0:56"
 const TIME_TEXT = "(\\d+(?::\\d{2}){1,2}(?:\\.\\d+)?)";
-// Raids print a wave/room duration before the overall time — prefer the overall one.
+// Raids print a wave/room duration before the overall time, and phased bosses
+// print per-phase splits ("Nightmare P3 boss complete! Duration: 3:15.60
+// Total: 12:42.00") — prefer the overall/cumulative time over the phase one.
 const COMPLETION_TIME = new RegExp(`completion time:? ${TIME_TEXT}`, "i");
+const TOTAL = new RegExp(`total:? ${TIME_TEXT}`, "i");
 const DURATION = new RegExp(`(?:duration|subdued in):? ${TIME_TEXT}`, "i");
 
 export function parseTimeText(text: string): number | null {
@@ -28,7 +31,7 @@ export function parseTimeText(text: string): number | null {
 }
 
 export function parseTimeLine(message: string): { ms: number; isPb: boolean } | null {
-  const m = COMPLETION_TIME.exec(message) ?? DURATION.exec(message);
+  const m = COMPLETION_TIME.exec(message) ?? TOTAL.exec(message) ?? DURATION.exec(message);
   if (!m) return null;
   const ms = parseTimeText(m[1]);
   if (ms == null || ms <= 0) return null;
@@ -82,17 +85,24 @@ export type FastestKill = {
   killCount: number | null;
 };
 
+export type BossTimes = {
+  boss: string;
+  /** Fastest first; each player appears once, with their best time. */
+  times: FastestKill[];
+};
+
 /**
- * The fastest time per boss. Each kill takes its own time (from Dink) or the
- * same player's closest TIME row within the pairing window. Raid teammates
- * share the team's time, and several teammates reporting the same run are
- * merged into one entry with all their names.
+ * Kill times per boss, for the Fastest kills section. Each kill takes its own
+ * time (from Dink) or the same player's closest TIME row within the pairing
+ * window. Raid teammates share the team's time, and several teammates
+ * reporting the same run are merged into one entry with all their names.
+ * Ranked fastest first, keeping only each player's best run.
  */
-export function fastestKills(
+export function killTimesByBoss(
   kills: KillRow[],
   times: TimeRow[],
   displayName: (rsn: string) => string | null
-): FastestKill[] {
+): BossTimes[] {
   const timesByPlayer = new Map<string, TimeRow[]>();
   for (const t of times) {
     if (t.durationMs == null) continue;
@@ -101,7 +111,7 @@ export function fastestKills(
     timesByPlayer.set(t.rsnKey, list);
   }
 
-  const best = new Map<string, FastestKill>();
+  const runsByBoss = new Map<string, FastestKill[]>();
   for (const k of kills) {
     if (!k.source) continue;
     let ms = k.durationMs;
@@ -123,14 +133,30 @@ export function fastestKills(
     if (!team.length) continue;
 
     const key = k.source.trim().toLowerCase();
-    const current = best.get(key);
-    if (!current || ms < current.ms - SAME_RUN_TOLERANCE_MS) {
-      best.set(key, { boss: k.source, ms, isPb, players: team, killCount: k.killCount });
-    } else if (Math.abs(ms - current.ms) <= SAME_RUN_TOLERANCE_MS) {
-      // Same run reported by another teammate — merge the names.
-      for (const name of team) if (!current.players.includes(name)) current.players.push(name);
-      current.isPb ||= isPb;
+    const runs = runsByBoss.get(key) ?? [];
+    // Same run reported by another teammate — merge the names.
+    const sameRun = runs.find((r) => Math.abs(r.ms - ms!) <= SAME_RUN_TOLERANCE_MS);
+    if (sameRun) {
+      for (const name of team) if (!sameRun.players.includes(name)) sameRun.players.push(name);
+      sameRun.isPb ||= isPb;
+    } else {
+      runs.push({ boss: k.source, ms, isPb, players: team, killCount: k.killCount });
     }
+    runsByBoss.set(key, runs);
   }
-  return [...best.values()].sort((a, b) => a.boss.localeCompare(b.boss));
+
+  const result: BossTimes[] = [];
+  for (const runs of runsByBoss.values()) {
+    runs.sort((a, b) => a.ms - b.ms);
+    const seen = new Set<string>();
+    const ranked: FastestKill[] = [];
+    for (const run of runs) {
+      // Keep a run only if someone in it hasn't already got a faster one.
+      if (run.players.every((p) => seen.has(p))) continue;
+      run.players.forEach((p) => seen.add(p));
+      ranked.push(run);
+    }
+    result.push({ boss: ranked[0].boss, times: ranked });
+  }
+  return result.sort((a, b) => a.boss.localeCompare(b.boss));
 }

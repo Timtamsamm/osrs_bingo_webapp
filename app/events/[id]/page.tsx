@@ -9,7 +9,7 @@ import LocalTime from "@/app/components/LocalTime";
 import { eventStatus, findClanMember, formatGp, formatClanRole, getClanRoster, splitByRoster, VIA_LABELS } from "@/lib/clanEvents";
 import StatusBadge from "../StatusBadge";
 import ZoomableThumbnail from "@/app/components/ZoomableThumbnail";
-import { fastestKills, formatDuration } from "@/lib/killTimes";
+import { killTimesByBoss, formatDuration, type FastestKill } from "@/lib/killTimes";
 import { eventGains, finalizeEventStats, type PlayerGains } from "@/lib/eventStats";
 
 interface Props {
@@ -51,7 +51,7 @@ export default async function EventPage({ params }: Props) {
 
   // Raid teammates share the team's time; with "Clan members only" on, guests
   // are left out of the names (and a time with no clan member on it is dropped).
-  const fastest = fastestKills(
+  const fastest = killTimesByBoss(
     activity.filter((a) => a.type === "KILL"),
     event.activity.filter((a) => a.type === "TIME"),
     (rsn) => (isShown(rsn) ? (findClanMember(roster, rsn)?.displayName ?? rsn) : null)
@@ -184,24 +184,38 @@ export default async function EventPage({ params }: Props) {
 
         {fastest.length > 0 && (
           <section className="mb-8">
-            <h2 className="font-[family-name:var(--font-cinzel)] text-xl font-bold text-white heading-glow mb-3">Fastest kills</h2>
-            <div className="bg-[#0e0820] border border-purple-900/40 rounded-2xl divide-y divide-purple-900/20">
-              {fastest.map((f) => (
-                <div key={f.boss} className="px-4 py-2.5 flex items-center gap-3 text-sm">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-purple-100 truncate">{f.boss}</p>
-                    <p className="text-[11px] text-purple-500/80 truncate">
-                      {f.players.join(", ")}
-                      {f.killCount != null ? ` · KC ${f.killCount.toLocaleString()}` : ""}
-                    </p>
-                  </div>
-                  {f.isPb && (
-                    <span className="text-[10px] uppercase tracking-wider font-semibold border rounded-full px-2 py-0.5 shrink-0 bg-amber-500/10 text-amber-300 border-amber-500/40">
-                      PB
-                    </span>
-                  )}
-                  <p className="text-purple-100 font-semibold tabular-nums shrink-0">{formatDuration(f.ms)}</p>
-                </div>
+            <h2 className="font-[family-name:var(--font-cinzel)] text-xl font-bold text-white heading-glow mb-1">Fastest kills</h2>
+            <p className="text-xs text-purple-500/80 mb-3">Click a boss to see everyone&apos;s best time.</p>
+            <div className="bg-[#0e0820] border border-purple-900/40 rounded-2xl divide-y divide-purple-900/20 overflow-hidden">
+              {fastest.map(({ boss, times }) => (
+                <details key={boss} className="group">
+                  <summary className="px-4 py-2.5 flex items-center gap-3 text-sm cursor-pointer list-none hover:bg-purple-900/10 [&::-webkit-details-marker]:hidden">
+                    <span className="w-3 shrink-0 text-purple-500 group-open:rotate-90 transition-transform">›</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-purple-100 truncate">{boss}</p>
+                      <p className="text-[11px] text-purple-500/80 truncate">
+                        {times[0].players.join(", ")}
+                        {times[0].killCount != null ? ` · KC ${times[0].killCount.toLocaleString()}` : ""}
+                        {times.length > 1 ? ` · ${times.length} times` : ""}
+                      </p>
+                    </div>
+                    {times[0].isPb && <PbBadge />}
+                    <p className="text-purple-100 font-semibold tabular-nums shrink-0">{formatDuration(times[0].ms)}</p>
+                  </summary>
+                  <ol className="bg-black/20 border-t border-purple-900/30 px-4 py-2">
+                    {times.map((t: FastestKill, i: number) => (
+                      <li key={`${t.ms}-${t.players.join(",")}`} className="py-1.5 flex items-center gap-3 text-sm">
+                        <span className={`w-6 text-right tabular-nums text-xs ${i === 0 ? "text-amber-300 font-semibold" : "text-purple-500"}`}>#{i + 1}</span>
+                        <p className="flex-1 min-w-0 truncate text-purple-200">
+                          {t.players.join(", ")}
+                          {t.killCount != null && <span className="text-purple-500/80 text-[11px]"> · KC {t.killCount.toLocaleString()}</span>}
+                        </p>
+                        {t.isPb && <PbBadge />}
+                        <span className="tabular-nums text-purple-100 shrink-0">{formatDuration(t.ms)}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </details>
               ))}
             </div>
           </section>
@@ -374,5 +388,13 @@ function StatsGained({ players, final }: { players: Array<PlayerGains & { name: 
         ))}
       </div>
     </section>
+  );
+}
+
+function PbBadge() {
+  return (
+    <span className="text-[10px] uppercase tracking-wider font-semibold border rounded-full px-2 py-0.5 shrink-0 bg-amber-500/10 text-amber-300 border-amber-500/40">
+      PB
+    </span>
   );
 }
